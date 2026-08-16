@@ -49,6 +49,27 @@ class DaysUntilTests(unittest.TestCase):
         self.assertIsNone(render.days_until(None, "2026-08-15"))
 
 
+class SlugTests(unittest.TestCase):
+    def test_colliding_slugs_are_made_unique(self):
+        tabs = [{"slug": "tryout"}, {"slug": "tryout"}, {"slug": "tryout"}]
+        self.assertEqual(render.unique_slugs(tabs), ["tryout", "tryout-2", "tryout-3"])
+
+    def test_empty_slug_falls_back_to_the_registration_id(self):
+        self.assertEqual(render.unique_slugs([{"slug": "", "id": "1126331"}]),
+                         ["1126331"])
+
+    def test_no_slug_and_no_id_still_gets_an_id(self):
+        self.assertEqual(render.unique_slugs([{}]), ["registration-1"])
+
+    def test_two_registrations_never_share_a_panel_id(self):
+        tabs = [dict(TABS[0], slug="same"), dict(TABS[1], slug="same")]
+        html = render.render_dashboard(tabs, "now", "2026-08-15")
+        self.assertEqual(html.count('id="panel-same"'), 1)
+        self.assertEqual(html.count('id="panel-same-2"'), 1)
+        self.assertEqual(html.count('data-slug="same-2"'), 1)
+        self.assertNotIn('id="panel-"', html)
+
+
 class RenderTests(unittest.TestCase):
     def setUp(self):
         self.html = render.render_dashboard(TABS, "Aug 15, 2026 9:55 PM", "2026-08-15")
@@ -98,6 +119,11 @@ class RenderTests(unittest.TestCase):
 
     def test_output_passes_the_pii_scan(self):
         piiscan.assert_clean(self.html)
+
+    def test_panel_ids_match_the_tab_buttons(self):
+        for slug in ["travel-tryout", "skills-course"]:
+            self.assertIn('data-slug="%s"' % slug, self.html)
+            self.assertIn('id="panel-%s"' % slug, self.html)
 
     def test_handles_no_active_registrations(self):
         html = render.render_dashboard([], "now", "2026-08-15")

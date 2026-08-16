@@ -32,11 +32,17 @@ cd /Users/ricci/lsgba-registrations-dashboard
 python3 scripts/check.py --counts '[{"id":"1126331","name":"...","count":23}]'
 ```
 
-Exit code 1 means nothing moved. Report "no change since \<lastRun\>" and STOP.
-Do not export, rebuild, commit, or push.
+Read the exit code exactly:
 
-Exit code 0 means at least one registration changed. Continue with only the
-ones whose `changed` is `true`.
+- **0** — at least one registration changed. Continue with only the ones whose
+  `changed` is `true`.
+- **3** — nothing moved. Report "no change since \<lastRun\>" and STOP. Do not
+  export, rebuild, commit, or push.
+- **2** — bad input or unreadable state. Nothing was compared, so you know
+  nothing. Report the error message and STOP. Never report "no change" on a 2.
+
+If stderr carries `WARNING: ... is in state.json but was not discovered`, a
+registration you should have found in step 1 is missing. Say so in your report.
 
 ## 4. Export each changed registration
 
@@ -69,15 +75,35 @@ python3 -m unittest discover tests
 git add -A && git commit -m "Refresh dashboard: <summary>" && git push
 ```
 
-`build.py` runs the PII scan and refuses to write if it trips. If it raises
-`PIIFound`, STOP and report which pattern matched. Do not bypass it.
+**Run these one at a time and stop on the first non-zero exit.** `build.py`
+exits non-zero when a registration in `state.json` could not be rendered —
+almost always because its export is no longer in `~/Downloads`. It still writes
+`index.html` so you can look at it, but that page is missing a tab and must not
+be committed over the good one. Re-export the missing registration (step 4) and
+build again. Do not commit a build that exited non-zero.
+
+`build.py` also runs the PII scan and refuses to write if it trips. If it raises
+`PIIFound`, STOP and report which pattern matched — the message gives the kind
+and count only, and deliberately does not echo the matched values. Do not
+bypass it.
+
+If `build.py` prints `count mismatch: ...`, the CSV row count and the count read
+off the SportsEngine page disagree. The build is deliberately allowed to
+continue; carry the discrepancy into your report.
 
 Pages redeploys automatically on push, usually within a minute.
 
 ## 6. Report back
 
 Tell the user, per registration: the new total, the delta, and whether the
-fallback fired. Finish with the dashboard URL.
+fallback fired. Also relay, verbatim, anything the tools warned about:
+
+- any `count mismatch:` line from `build.py` (CSV rows vs. the page total),
+- any registration `build.py` skipped for a missing export,
+- any registration `check.py` flagged as present in `state.json` but not
+  discovered.
+
+A warning nobody reads is the same as no warning. Finish with the dashboard URL.
 
 ## Notes
 
@@ -85,4 +111,7 @@ fallback fired. Finish with the dashboard URL.
   financials.
 - A registration with no `event` block in `state.json` renders without a
   countdown. Ask the user for its dates and add them by hand.
-- Use `--dry-run` on `build.py` to inspect the page without committing.
+- `--dry-run` on `build.py` writes `index.html` exactly as a normal run does; it
+  only skips the commit-and-push step and says so. The regenerated page is left
+  in the working tree, so a later `git add -A` will sweep it up. It is a
+  "stop before publishing" switch, not a "change nothing on disk" switch.

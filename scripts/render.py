@@ -115,7 +115,31 @@ def _timeline_chart(points):
            pad, pad - 10, peak))
 
 
-def _panel(tab, today, is_first):
+def unique_slugs(tabs):
+    """One DOM-safe, unique slug per tab, in order.
+
+    Two registrations can slugify to the same string, and an empty slug yields
+    id="panel-". Either way getElementById returns the first match and two tabs
+    drive one panel, so collisions get a counter suffix and empties fall back to
+    the registration id.
+    """
+    slugs = []
+    used = set()
+    for index, tab in enumerate(tabs):
+        base = str(tab.get("slug") or tab.get("id") or "").strip()
+        if not base:
+            base = "registration-%d" % (index + 1)
+        slug = base
+        counter = 2
+        while slug in used:
+            slug = "%s-%d" % (base, counter)
+            counter += 1
+        used.add(slug)
+        slugs.append(slug)
+    return slugs
+
+
+def _panel(tab, today, is_first, slug):
     metrics = tab["metrics"]
     dimension_blocks = []
     for dimension in metrics.get("dimensions", []):
@@ -134,7 +158,7 @@ def _panel(tab, today, is_first):
         '  %s'
         '  <section class="block"><h3>Signups over time</h3>%s</section>'
         '</div>'
-        % (" is-active" if is_first else "", escape(tab["slug"]),
+        % (" is-active" if is_first else "", escape(slug),
            metrics.get("total", 0), _countdown_text(tab.get("event"), today),
            _delta_text(tab), _bar_chart(metrics.get("grades", [])),
            "".join(dimension_blocks), _timeline_chart(metrics.get("timeline", []))))
@@ -210,12 +234,14 @@ document.querySelectorAll('.tab-button').forEach(function(button){
 
 def render_dashboard(tabs, generated_at, today):
     if tabs:
+        slugs = unique_slugs(tabs)
         buttons = "".join(
             '<button class="tab-button%s" data-slug="%s" role="tab" aria-selected="%s">%s</button>'
-            % (" is-active" if i == 0 else "", escape(tab["slug"]),
+            % (" is-active" if i == 0 else "", escape(slugs[i]),
                "true" if i == 0 else "false", escape(tab["name"]))
             for i, tab in enumerate(tabs))
-        panels = "".join(_panel(tab, today, i == 0) for i, tab in enumerate(tabs))
+        panels = "".join(_panel(tab, today, i == 0, slugs[i])
+                         for i, tab in enumerate(tabs))
         body = ('<nav class="tabs" role="tablist">%s</nav>%s' % (buttons, panels))
     else:
         body = '<div class="block"><p class="empty">No active registrations.</p></div>'
