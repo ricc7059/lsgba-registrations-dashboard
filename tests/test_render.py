@@ -92,26 +92,15 @@ class RenderTests(unittest.TestCase):
         # 23 + 37 = 60 must not appear anywhere.
         self.assertNotIn(">60<", self.html)
 
-    def test_shows_a_positive_delta_with_a_sign(self):
-        self.assertIn("+4", self.html)
-
-    def test_shows_no_change_when_delta_is_zero(self):
-        # The scoreboard reads as a figure plus a suffix, so a flat run shows
-        # an em dash captioned "no change" rather than the words on their own.
-        self.assertIn("no change", self.html)
-
     def test_shows_the_countdown(self):
-        # Same shape: the digit is the value, "days out" is the suffix.
+        # The digit is the value, "days out" is the suffix.
         self.assertIn(">9<", self.html)
         self.assertIn("days out", self.html)
 
-    def test_first_run_reads_as_a_dash_with_a_caption(self):
-        # A tab with no previous count has no delta to show; it must not
-        # render "+0" or an empty cell.
-        tabs = [dict(TABS[0], previous=None, delta=0)]
-        html = render.render_dashboard(tabs, "now", "2026-08-15")
-        self.assertIn("first run", html)
-        self.assertNotIn("+0", html)
+    def test_scoreboard_is_two_cells_with_no_change_readout(self):
+        self.assertEqual(self.html.count('class="board-cell"'), 4)  # 2 per panel
+        for gone in ["Change", "since last run", "first run", "no change", "+4"]:
+            self.assertNotIn(gone, self.html)
 
     def test_renders_dimension_labels(self):
         self.assertIn("Advanced", self.html)
@@ -216,6 +205,24 @@ class CrosstabRenderTests(unittest.TestCase):
     def test_the_flat_question_card_is_replaced_not_duplicated(self):
         html = render.render_dashboard([_tab_with_crosstab(0)], "now", "2026-08-15")
         self.assertEqual(html.count("Sessions?"), 1)
+
+    def test_small_counts_render_as_numbers_not_bars(self):
+        # Every grade at one volunteer makes every bar identical, so the chart
+        # would say nothing the number does not. skipped=0 so the standalone
+        # grade card is dropped and the breakdown is the only chart on the page.
+        tab = _tab_with_crosstab(0)
+        tab["metrics"]["crosstabs"][0]["rows"] = [
+            {"grade": "3rd Grade", "counts": {"Advanced": 1}, "total": 1},
+            {"grade": "6th Grade", "counts": {"Intermediate": 1}, "total": 1},
+        ]
+        html = render.render_dashboard([tab], "now", "2026-08-15")
+        self.assertIn('class="figure-row"', html)
+        self.assertNotIn('class="bar-track"', html)
+
+    def test_big_counts_still_render_as_bars(self):
+        html = render.render_dashboard([_tab_with_crosstab(0)], "now", "2026-08-15")
+        self.assertIn('class="bar-track"', html)
+        self.assertNotIn('class="figure-row"', html)
 
     def test_crosstab_output_passes_the_pii_scan(self):
         html = render.render_dashboard([_tab_with_crosstab(3)], "now", "2026-08-15")

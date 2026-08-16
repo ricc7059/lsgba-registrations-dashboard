@@ -91,18 +91,6 @@ def _countdown_reading(event, today):
     return ("—", "finished")
 
 
-def _delta_reading(tab):
-    """(value, suffix). Every scoreboard cell reads as a figure, like a real one."""
-    if tab.get("previous") is None:
-        return ("—", "first run")
-    delta = tab.get("delta", 0)
-    if delta > 0:
-        return ("+%d" % delta, "since last run")
-    if delta < 0:
-        return ("−%d" % abs(delta), "since last run")
-    return ("—", "no change")
-
-
 def _bars(pairs):
     """Horizontal bars. Numbers are tabular so they align down the column."""
     if not pairs:
@@ -120,7 +108,11 @@ def _bars(pairs):
     return '<div class="bars">%s</div>' % "".join(rows)
 
 
-# Segment colours for stacked bars, in order, each with a legible foreground.
+# Below this many in the largest cell, a breakdown is shown as bare numbers:
+# the bars would all be the same length and say nothing.
+MIN_FOR_BARS = 3
+
+# Series colours, in order, each with a legible foreground.
 SERIES = [
     (GOLD, "#201A12"),
     ("#A82A55", "#FFF0F3"),
@@ -131,11 +123,14 @@ SERIES = [
 
 
 def _grade_split(crosstab):
-    """A separate grade bar chart per answer, never combined into one bar.
+    """A separate grade breakdown per answer, never combined into one bar.
 
-    Both charts share one scale so a bar in Advanced and a bar in Intermediate
-    of the same length mean the same number of athletes. Every grade appears in
-    every chart, including at zero, so the two read row for row.
+    Where the counts are big enough to chart, each answer gets its own bar
+    chart and both share one scale, so a bar in Advanced and a bar in
+    Intermediate of the same length mean the same number of athletes. Where the
+    counts are small, the bars would all come out the same length and the
+    numbers are shown on their own instead. Either way every grade appears in
+    every column, including at zero, so they read row for row.
     """
     categories = crosstab["categories"]
     rows = crosstab["rows"]
@@ -148,27 +143,38 @@ def _grade_split(crosstab):
         [counts_by_grade[grade].get(category, 0)
          for grade in grades for category in categories] or [0]) or 1
 
+    # A bar only says something when the values differ enough for its length to
+    # be read. At one or two per grade every bar comes out the same, so the
+    # chart carries no information the number does not already give.
+    as_bars = biggest >= MIN_FOR_BARS
+
     blocks = []
     for index, category in enumerate(categories):
         colour = SERIES[index % len(SERIES)][0]
         total = sum(counts_by_grade[grade].get(category, 0) for grade in grades)
-        bar_rows = []
+        lines = []
         for grade in grades:
             count = counts_by_grade[grade].get(category, 0)
-            width = 100.0 * count / biggest
-            bar_rows.append(
-                '<div class="bar-row">'
-                '<span class="bar-label">%s</span>'
-                '<span class="bar-track"><span class="bar-fill" '
-                'style="width:%.1f%%;background:%s"></span></span>'
-                '<span class="bar-value">%d</span>'
-                '</div>' % (escape(grade), width, colour, count))
+            if as_bars:
+                lines.append(
+                    '<div class="bar-row">'
+                    '<span class="bar-label">%s</span>'
+                    '<span class="bar-track"><span class="bar-fill" '
+                    'style="width:%.1f%%;background:%s"></span></span>'
+                    '<span class="bar-value">%d</span>'
+                    '</div>'
+                    % (escape(grade), 100.0 * count / biggest, colour, count))
+            else:
+                lines.append(
+                    '<div class="figure-row"><span class="bar-label">%s</span>'
+                    '<span class="bar-value%s">%d</span></div>'
+                    % (escape(grade), "" if count else " is-zero", count))
         blocks.append(
             '<div class="split">'
             '<h4><span class="swatch" style="background:%s"></span>%s'
             '<b class="num">%d</b></h4>'
             '<div class="bars">%s</div></div>'
-            % (colour, escape(category), total, "".join(bar_rows)))
+            % (colour, escape(category), total, "".join(lines)))
 
     caption = ('<p class="caption">%d didn\'t answer</p>' % crosstab["skipped"]
                if crosstab["skipped"] else "")
@@ -199,12 +205,10 @@ def _panel(tab, slug, today, is_first):
     metrics = tab["metrics"]
     event = tab.get("event") or {}
     countdown_value, countdown_suffix = _countdown_reading(event, today)
-    delta_value, delta_suffix = _delta_reading(tab)
 
     board = "".join([
         _board_cell("Registered", "%d" % metrics.get("total", 0), "athletes"),
         _board_cell("Countdown", countdown_value, countdown_suffix),
-        _board_cell("Change", delta_value, delta_suffix),
     ])
 
     # A question broken down by grade supersedes the same question shown flat:
@@ -300,7 +304,7 @@ margin-bottom:20px}
 .dates{margin:0;font-size:.83rem;color:var(--dim)}
 
 /* ---- scoreboard ---- */
-.board{display:grid;grid-template-columns:repeat(3,1fr);
+.board{display:grid;grid-template-columns:repeat(2,1fr);
 background:linear-gradient(135deg,var(--maroon) 0%%,var(--maroon-deep) 100%%);
 border:1px solid rgba(210,183,124,.28);border-radius:16px;overflow:hidden}
 .board-cell{padding:20px 22px;border-right:1px solid rgba(210,183,124,.18);
@@ -333,6 +337,11 @@ font-size:.86rem;font-weight:700;color:var(--text)}
 .swatch{width:11px;height:11px;border-radius:3px;flex:0 0 11px}
 
 /* ---- bars ---- */
+.figure-row{display:flex;align-items:baseline;justify-content:space-between;
+gap:14px;padding:7px 0;border-bottom:1px solid rgba(232,216,184,.06)}
+.figure-row:last-child{border-bottom:0}
+.figure-row .bar-value{font-size:1.05rem}
+.bar-value.is-zero{color:var(--dim)}
 .bar-row{display:grid;grid-template-columns:118px 1fr 34px;align-items:center;
 gap:12px;margin-bottom:9px}
 .bar-row:last-child{margin-bottom:0}
