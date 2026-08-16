@@ -101,6 +101,19 @@ class RecordTests(unittest.TestCase):
                             23, "a.csv")
         self.assertEqual(data["registrations"]["1"]["slug"], "travel-tryout")
 
+    def test_recording_stamps_last_run(self):
+        data = {"lastRun": "2026-01-01T00:00:00-06:00", "registrations": {}}
+        state.record_export(data, "1", "Tryout", 23, "a.csv")
+        self.assertNotEqual(data["lastRun"], "2026-01-01T00:00:00-06:00")
+        # ISO 8601 with an offset, e.g. 2026-08-15T21:55:00-05:00
+        self.assertRegex(data["lastRun"],
+                         r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$")
+
+    def test_touch_last_run_accepts_an_explicit_stamp(self):
+        data = {"lastRun": None, "registrations": {}}
+        state.touch_last_run(data, "2026-08-16T09:30:00-05:00")
+        self.assertEqual(data["lastRun"], "2026-08-16T09:30:00-05:00")
+
     def test_recording_preserves_a_hand_edited_event_block(self):
         data = {"lastRun": None, "registrations": {
             "1126331": {"event": {"label": "Aug 24-27", "start": "2026-08-24",

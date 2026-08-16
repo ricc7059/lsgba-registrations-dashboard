@@ -1,9 +1,21 @@
 """Read, write, and diff the run state. Counts and dates only."""
 
+import datetime
 import io
 import json
 import os
 import re
+
+
+def now_stamp():
+    """Local time, ISO 8601 with a UTC offset: '2026-08-15T21:55:00-05:00'."""
+    return datetime.datetime.now().astimezone().replace(microsecond=0).isoformat()
+
+
+def touch_last_run(data, stamp=None):
+    """Stamp lastRun. Call it from anything that advances the dashboard."""
+    data["lastRun"] = stamp or now_stamp()
+    return data["lastRun"]
 
 
 def slugify(name):
@@ -47,8 +59,9 @@ def diff(data, discovered):
     return results
 
 
-def record_export(data, reg_id, name, count, export_filename):
+def record_export(data, reg_id, name, count, export_filename, stamp=None):
     """Advance state for one registration. Only called after a successful export."""
+    touch_last_run(data, stamp)
     registrations = data.setdefault("registrations", {})
     entry = registrations.setdefault(reg_id, {})
     previous = entry.get("lastCount")
