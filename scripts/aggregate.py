@@ -9,10 +9,26 @@ import re
 # so they are dropped rather than charted.
 MAX_DIMENSION_CARDINALITY = 10
 
+# A published label longer than this is prose, not a category. Real categorical
+# answers ("Advanced", "Head Coach", "6th Grade") are short; a sentence typed
+# into a text box is where identifying detail shows up.
+MAX_DIMENSION_VALUE_LENGTH = 40
+
+# Below this many rows, "every value is distinct" is unremarkable, so the
+# identifier test only applies from three rows up.
+MIN_ROWS_FOR_IDENTIFIER_TEST = 3
+
 NO_RESPONSE = "No response"
 
 GRADE_RE = re.compile(r"^\s*(\d+)")
 DATE_RE = re.compile(r"^\s*(\d{1,2})/(\d{1,2})/(\d{4})")
+
+# A column is only treated as the grade column if its values actually look like
+# grades. "grade" appearing in a header is not enough: a question such as
+# "What grade and school does your player attend?" would otherwise publish
+# free-text answers verbatim, unbounded, at any row count.
+GRADE_VALUE_RE = re.compile(
+    r"^(K|Pre-K|Kindergarten|\d{1,2}(st|nd|rd|th))(\s+Grade)?$", re.IGNORECASE)
 
 
 def parse_registration_date(value):
@@ -43,6 +59,39 @@ def _is_date_column(name):
     return "registration date" in name.lower()
 
 
+def is_grade_value(value):
+    """True for a grade-shaped answer, or for a blank (which buckets later)."""
+    text = (value or "").strip()
+    if not text:
+        return True
+    return bool(GRADE_VALUE_RE.match(text))
+
+
+def _values_look_like_grades(rows, column):
+    return all(is_grade_value(row.get(column)) for row in rows)
+
+
+def _is_publishable_dimension(counter, row_count):
+    """Gate every generic dimension before it can reach the page.
+
+    Cardinality alone is not enough: every registration passes through a phase
+    with ten or fewer entries, and in that phase a per-row-unique column (an
+    athlete name, a phone number) has ten or fewer distinct values and would
+    publish verbatim.
+    """
+    if len(counter) > MAX_DIMENSION_CARDINALITY:
+        return False
+    # Every value distinct means the column identifies rows rather than
+    # categorising them. A ratio test was considered and rejected: on a young
+    # registration with five signups across four grades it drops legitimate
+    # data, which is exactly when the board most wants to watch signups.
+    if row_count >= MIN_ROWS_FOR_IDENTIFIER_TEST and len(counter) == row_count:
+        return False
+    if any(len(value) > MAX_DIMENSION_VALUE_LENGTH for value in counter):
+        return False
+    return True
+
+
 def aggregate(parsed):
     """Build the metrics dict for one registration."""
     rows = parsed.get("rows", [])
@@ -52,6 +101,11 @@ def aggregate(parsed):
     date_column = next((c for c in columns if _is_date_column(c)), None)
 
     grades = []
+    if grade_column and not _values_look_like_grades(rows, grade_column):
+        # The header matched but the answers are not grades, so this is some
+        # other question that happens to contain the word. Drop the block
+        # entirely rather than publish free text.
+        grade_column = None
     if grade_column:
         counter = collections.Counter(
             row.get(grade_column) or NO_RESPONSE for row in rows)
@@ -62,7 +116,7 @@ def aggregate(parsed):
         if column == grade_column or column == date_column:
             continue
         counter = collections.Counter(row.get(column) or NO_RESPONSE for row in rows)
-        if len(counter) > MAX_DIMENSION_CARDINALITY:
+        if not _is_publishable_dimension(counter, len(rows)):
             continue
         # Highest count first; ties broken alphabetically so output is stable.
         values = sorted(counter.items(), key=lambda pair: (-pair[1], pair[0]))

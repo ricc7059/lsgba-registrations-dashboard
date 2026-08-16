@@ -1,4 +1,6 @@
+import io
 import os
+import tempfile
 import unittest
 
 from scripts import parse
@@ -65,6 +67,35 @@ class ParseExportTests(unittest.TestCase):
         skills = parse.parse_export(SKILLS)["columns"]
         self.assertIn("Interested in coaching for the 2026-27 travel season?", tryout)
         self.assertIn("What sessions will your player be attending?", skills)
+
+
+class TokenDenylistTests(unittest.TestCase):
+    def test_renamed_pii_headers_are_still_dropped(self):
+        # These are the renames exact matching misses.
+        for header in ["Athlete Name", "Parent/Guardian Name", "Cell Phone",
+                       "Birthdate", "DOB", "Mobile Number", "Home Address",
+                       "City", "Zip Code", "Emergency Contact", "E-Mail",
+                       "Additional Notes", "Comments"]:
+            self.assertTrue(parse.is_pii_column(header), header)
+
+    def test_todays_real_columns_survive(self):
+        for header in ["Athlete's current grade (entering Fall 2026)",
+                       "What sessions will your player be attending?",
+                       "Interested in coaching for the 2026-27 travel season?",
+                       "Registration Date"]:
+            self.assertFalse(parse.is_pii_column(header), header)
+
+    def test_a_renamed_column_never_reaches_the_rows(self):
+        path = os.path.join(tempfile.mkdtemp(), "renamed.csv")
+        with io.open(path, "w", encoding="utf-8") as handle:
+            handle.write(u"Athlete Name,Cell Phone,Birthdate,Sessions\n")
+            handle.write(u"Ada Fake,504-555-0143,2014-05-06,Advanced\n")
+        result = parse.parse_export(path)
+        self.assertEqual(result["columns"], ["Sessions"])
+        blob = repr(result)
+        self.assertNotIn("Ada Fake", blob)
+        self.assertNotIn("504-555-0143", blob)
+        self.assertNotIn("2014-05-06", blob)
 
 
 if __name__ == "__main__":

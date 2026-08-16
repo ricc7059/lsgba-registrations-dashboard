@@ -1,3 +1,4 @@
+import collections
 import os
 import unittest
 
@@ -84,6 +85,91 @@ class AggregateTests(unittest.TestCase):
 
     def test_timeline_is_empty_when_there_are_no_rows(self):
         self.assertEqual(aggregate.aggregate({"columns": [], "rows": []})["timeline"], [])
+
+
+class GradeValueTests(unittest.TestCase):
+    def test_accepts_the_real_grade_shapes(self):
+        for value in ["3rd Grade", "8th Grade", "10th", "1st grade", "K",
+                      "Pre-K", "Kindergarten", "", "   "]:
+            self.assertTrue(aggregate.is_grade_value(value), value)
+
+    def test_rejects_free_text(self):
+        for value in ["6th grade at St. Mary's", "Ada goes to Jefferson Elementary",
+                      "not sure yet", "6th Grade, Riverside Middle"]:
+            self.assertFalse(aggregate.is_grade_value(value), value)
+
+
+class GradeColumnGuardTests(unittest.TestCase):
+    def test_a_grade_and_school_question_publishes_nothing(self):
+        # "What grade and school does your player attend?" matches the header
+        # rule but its answers are free text, so the block must be dropped.
+        parsed = {
+            "columns": ["What grade and school does your player attend?"],
+            "rows": [{"What grade and school does your player attend?":
+                      "%dth grade at School %d" % (i, i)} for i in range(20)],
+        }
+        result = aggregate.aggregate(parsed)
+        self.assertEqual(result["grades"], [])
+        self.assertEqual(result["dimensions"], [])
+
+    def test_a_short_free_text_grade_column_is_still_dropped(self):
+        parsed = {
+            "columns": ["Grade / School"],
+            "rows": [{"Grade / School": "6th, Jefferson"},
+                     {"Grade / School": "6th, Jefferson"},
+                     {"Grade / School": "5th, Riverside"}],
+        }
+        self.assertEqual(aggregate.aggregate(parsed)["grades"], [])
+
+    def test_a_real_grade_column_with_blanks_still_publishes(self):
+        parsed = {
+            "columns": ["Athlete's current grade"],
+            "rows": [{"Athlete's current grade": "6th Grade"},
+                     {"Athlete's current grade": "6th Grade"},
+                     {"Athlete's current grade": ""}],
+        }
+        self.assertEqual(aggregate.aggregate(parsed)["grades"],
+                         [("6th Grade", 2), ("No response", 1)])
+
+
+class PublishableDimensionTests(unittest.TestCase):
+    def test_cardinality_cap_still_applies(self):
+        counter = collections.Counter("value %d" % i for i in range(11))
+        self.assertFalse(aggregate._is_publishable_dimension(counter, 40))
+
+    def test_every_value_unique_is_treated_as_an_identifier(self):
+        counter = collections.Counter(["Ada F", "Bea G", "Cy H", "Di J", "Eve K"])
+        self.assertFalse(aggregate._is_publishable_dimension(counter, 5))
+
+    def test_two_rows_two_values_is_not_an_identifier(self):
+        counter = collections.Counter(["Advanced", "Intermediate"])
+        self.assertTrue(aggregate._is_publishable_dimension(counter, 2))
+
+    def test_five_signups_across_four_grades_still_publishes(self):
+        # The case the rejected ratio test would have thrown away.
+        counter = collections.Counter(["3rd", "4th", "5th", "6th", "6th"])
+        self.assertTrue(aggregate._is_publishable_dimension(counter, 5))
+
+    def test_long_values_are_dropped(self):
+        counter = collections.Counter(["Yes", "N" + "o" * 45])
+        self.assertFalse(aggregate._is_publishable_dimension(counter, 20))
+
+
+class SmallRegistrationLeakTests(unittest.TestCase):
+    def test_a_five_row_export_publishes_no_per_row_unique_column(self):
+        columns = ["Athlete Nickname", "Team Preference"]
+        names = ["Ada", "Bea", "Cy", "Di", "Eve"]
+        prefs = ["Blue", "Blue", "Gold", "Gold", "Blue"]
+        parsed = {"columns": columns,
+                  "rows": [{"Athlete Nickname": names[i], "Team Preference": prefs[i]}
+                           for i in range(5)]}
+        questions = [d["question"] for d in aggregate.aggregate(parsed)["dimensions"]]
+        self.assertEqual(questions, ["Team Preference"])
+
+    def test_iso_dates_in_a_five_row_export_do_not_publish(self):
+        parsed = {"columns": ["Signup Day"],
+                  "rows": [{"Signup Day": "2026-08-%02d" % (10 + i)} for i in range(5)]}
+        self.assertEqual(aggregate.aggregate(parsed)["dimensions"], [])
 
 
 if __name__ == "__main__":
