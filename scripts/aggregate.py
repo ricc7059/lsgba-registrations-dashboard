@@ -92,6 +92,43 @@ def _is_publishable_dimension(counter, row_count):
     return True
 
 
+def _crosstab(rows, grade_column, column, ordered_values):
+    """Break one already-publishable question down by grade.
+
+    Non-responses are excluded from the breakdown and reported separately: a
+    question 20 of 23 people skipped would otherwise bury the three who
+    answered. Both columns have already cleared the publishability gates, so
+    this introduces no new values to the page — only a second view of them.
+    """
+    categories = [value for value in ordered_values if value != NO_RESPONSE]
+    if not categories:
+        return None
+
+    per_grade = collections.OrderedDict()
+    skipped = 0
+    for row in rows:
+        answer = row.get(column) or NO_RESPONSE
+        if answer == NO_RESPONSE:
+            skipped += 1
+            continue
+        grade = row.get(grade_column) or NO_RESPONSE
+        per_grade.setdefault(grade, collections.Counter())[answer] += 1
+
+    table = []
+    for grade in sorted(per_grade, key=grade_sort_key):
+        counts = per_grade[grade]
+        table.append({
+            "grade": grade,
+            "counts": dict(counts),
+            "total": sum(counts.values()),
+        })
+
+    if not table:
+        return None
+    return {"question": column, "categories": categories,
+            "rows": table, "skipped": skipped}
+
+
 def aggregate(parsed):
     """Build the metrics dict for one registration."""
     rows = parsed.get("rows", [])
@@ -112,6 +149,7 @@ def aggregate(parsed):
         grades = sorted(counter.items(), key=lambda pair: grade_sort_key(pair[0]))
 
     dimensions = []
+    crosstabs = []
     for column in columns:
         if column == grade_column or column == date_column:
             continue
@@ -121,6 +159,9 @@ def aggregate(parsed):
         # Highest count first; ties broken alphabetically so output is stable.
         values = sorted(counter.items(), key=lambda pair: (-pair[1], pair[0]))
         dimensions.append({"question": column, "values": values})
+        if grade_column:
+            crosstabs.append(
+                _crosstab(rows, grade_column, column, [label for label, _ in values]))
 
     timeline = []
     if date_column:
@@ -138,5 +179,6 @@ def aggregate(parsed):
         "total": len(rows),
         "grades": grades,
         "dimensions": dimensions,
+        "crosstabs": [table for table in crosstabs if table],
         "timeline": timeline,
     }

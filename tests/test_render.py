@@ -117,8 +117,13 @@ class RenderTests(unittest.TestCase):
         self.assertIn("Advanced", self.html)
         self.assertIn("Intermediate", self.html)
 
-    def test_draws_svg_charts(self):
-        self.assertIn("<svg", self.html)
+    def test_charts_render_as_bar_rows(self):
+        # Charts are plain HTML bars now; the signups-over-time SVG was cut.
+        self.assertIn('class="bar-row"', self.html)
+        self.assertNotIn("<svg", self.html)
+
+    def test_no_signups_over_time_section(self):
+        self.assertNotIn("Signups over time", self.html)
 
     def test_has_no_external_references(self):
         for forbidden in ["http://", "https://cdn", "<script src", "<link rel=\"stylesheet\""]:
@@ -140,6 +145,81 @@ class RenderTests(unittest.TestCase):
     def test_handles_no_active_registrations(self):
         html = render.render_dashboard([], "now", "2026-08-15")
         self.assertIn("No active registrations", html)
+
+
+def _tab_with_crosstab(skipped):
+    """A tab carrying one grade-by-question breakdown."""
+    return {
+        "slug": "camp",
+        "name": "Camp",
+        "event": {"label": "Aug 18–20", "start": "2026-08-18", "end": "2026-08-20"},
+        "delta": 0,
+        "previous": 5,
+        "metrics": {
+            "total": 6 + skipped,
+            "grades": [("3rd Grade", 2), ("6th Grade", 4)],
+            "dimensions": [{"question": "Sessions?",
+                            "values": [("Advanced", 4), ("Intermediate", 2)]}],
+            "crosstabs": [{
+                "question": "Sessions?",
+                "categories": ["Advanced", "Intermediate"],
+                "rows": [
+                    {"grade": "3rd Grade", "counts": {"Intermediate": 2}, "total": 2},
+                    {"grade": "6th Grade", "counts": {"Advanced": 4}, "total": 4},
+                ],
+                "skipped": skipped,
+            }],
+            "timeline": [{"date": "2026-08-12", "new": 6, "cumulative": 6}],
+        },
+    }
+
+
+class CrosstabRenderTests(unittest.TestCase):
+    def test_renders_a_legend_with_each_category_total(self):
+        html = render.render_dashboard([_tab_with_crosstab(0)], "now", "2026-08-15")
+        self.assertIn("swatch", html)
+        self.assertIn("Advanced", html)
+        self.assertIn("Intermediate", html)
+
+    def test_each_answer_gets_its_own_chart_never_a_combined_bar(self):
+        html = render.render_dashboard([_tab_with_crosstab(0)], "now", "2026-08-15")
+        self.assertEqual(html.count('<div class="split">'), 2)
+        self.assertNotIn('class="stack"', html)
+        self.assertNotIn('class="seg"', html)
+
+    def test_every_grade_appears_in_every_chart_including_at_zero(self):
+        # The two charts must read row for row, so a grade with nobody in one
+        # answer still gets a labelled row showing 0.
+        html = render.render_dashboard([_tab_with_crosstab(0)], "now", "2026-08-15")
+        self.assertEqual(html.count("3rd Grade"), 2)
+        self.assertEqual(html.count("6th Grade"), 2)
+        self.assertIn(">0<", html)
+
+    def test_both_charts_share_one_scale(self):
+        # 4 is the largest cell, so it is the only 100%-wide bar; the grade with
+        # 2 must render at half that, not at full width on its own scale.
+        html = render.render_dashboard([_tab_with_crosstab(0)], "now", "2026-08-15")
+        self.assertIn("width:100.0%", html)
+        self.assertIn("width:50.0%", html)
+
+    def test_grade_card_is_dropped_when_everyone_answered(self):
+        # The breakdown's own right-hand column already carries grade totals.
+        html = render.render_dashboard([_tab_with_crosstab(0)], "now", "2026-08-15")
+        self.assertNotIn("By grade</h3>", html)
+
+    def test_grade_card_is_kept_when_some_people_skipped(self):
+        # The breakdown then covers only part of the field, so the full grade
+        # distribution still needs showing.
+        html = render.render_dashboard([_tab_with_crosstab(9)], "now", "2026-08-15")
+        self.assertIn("By grade</h3>", html)
+
+    def test_the_flat_question_card_is_replaced_not_duplicated(self):
+        html = render.render_dashboard([_tab_with_crosstab(0)], "now", "2026-08-15")
+        self.assertEqual(html.count("Sessions?"), 1)
+
+    def test_crosstab_output_passes_the_pii_scan(self):
+        html = render.render_dashboard([_tab_with_crosstab(3)], "now", "2026-08-15")
+        piiscan.assert_clean(html)
 
 
 if __name__ == "__main__":

@@ -172,5 +172,64 @@ class SmallRegistrationLeakTests(unittest.TestCase):
         self.assertEqual(aggregate.aggregate(parsed)["dimensions"], [])
 
 
+class CrosstabTests(unittest.TestCase):
+    """Every publishable question also gets broken down by grade."""
+
+    def setUp(self):
+        self.tryout = aggregate.aggregate(parse.parse_export(TRYOUT))
+        self.skills = aggregate.aggregate(parse.parse_export(SKILLS))
+
+    def test_a_crosstab_is_built_for_each_publishable_question(self):
+        self.assertEqual([t["question"] for t in self.skills["crosstabs"]],
+                         ["What sessions will your player be attending?"])
+
+    def test_rows_are_ordered_by_grade(self):
+        grades = [row["grade"] for row in self.skills["crosstabs"][0]["rows"]]
+        self.assertEqual(grades, sorted(grades, key=aggregate.grade_sort_key))
+
+    def test_counts_split_correctly_within_a_grade(self):
+        rows = dict((row["grade"], row) for row in self.skills["crosstabs"][0]["rows"])
+        self.assertEqual(rows["4th Grade"]["counts"], {"Intermediate": 1})
+        self.assertEqual(rows["4th Grade"]["total"], 1)
+
+    def test_non_responses_are_excluded_and_counted_separately(self):
+        table = self.tryout["crosstabs"][0]
+        self.assertNotIn("No response", table["categories"])
+        self.assertEqual(table["skipped"], 2)
+        # Only the people who actually answered appear in the rows.
+        self.assertEqual(sum(row["total"] for row in table["rows"]), 2)
+
+    def test_row_totals_equal_the_sum_of_their_counts(self):
+        for table in self.skills["crosstabs"] + self.tryout["crosstabs"]:
+            for row in table["rows"]:
+                self.assertEqual(row["total"], sum(row["counts"].values()))
+
+    def test_no_crosstab_without_a_grade_column(self):
+        parsed = {
+            "columns": ["Sessions"],
+            "rows": [{"Sessions": "Advanced"}, {"Sessions": "Intermediate"}],
+        }
+        self.assertEqual(aggregate.aggregate(parsed)["crosstabs"], [])
+
+    def test_no_crosstab_when_every_answer_is_blank(self):
+        parsed = {
+            "columns": ["Grade", "Sessions"],
+            "rows": [{"Grade": "5th Grade", "Sessions": ""},
+                     {"Grade": "6th Grade", "Sessions": ""}],
+        }
+        self.assertEqual(aggregate.aggregate(parsed)["crosstabs"], [])
+
+    def test_crosstab_carries_no_value_that_failed_the_dimension_gate(self):
+        # A column dropped as unpublishable must not reappear via the crosstab.
+        parsed = {
+            "columns": ["Grade", "Player Moniker"],
+            "rows": [{"Grade": "%dth Grade" % (i + 3),
+                      "Player Moniker": "Unique Person %d" % i} for i in range(6)],
+        }
+        result = aggregate.aggregate(parsed)
+        self.assertEqual(result["dimensions"], [])
+        self.assertEqual(result["crosstabs"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

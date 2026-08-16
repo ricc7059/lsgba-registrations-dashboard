@@ -120,6 +120,61 @@ def _bars(pairs):
     return '<div class="bars">%s</div>' % "".join(rows)
 
 
+# Segment colours for stacked bars, in order, each with a legible foreground.
+SERIES = [
+    (GOLD, "#201A12"),
+    ("#A82A55", "#FFF0F3"),
+    (CREAM, "#201A12"),
+    ("#C4566A", "#FFFFFF"),
+    ("#6E7F8C", "#FFFFFF"),
+]
+
+
+def _grade_split(crosstab):
+    """A separate grade bar chart per answer, never combined into one bar.
+
+    Both charts share one scale so a bar in Advanced and a bar in Intermediate
+    of the same length mean the same number of athletes. Every grade appears in
+    every chart, including at zero, so the two read row for row.
+    """
+    categories = crosstab["categories"]
+    rows = crosstab["rows"]
+    if not rows:
+        return '<p class="empty">Nobody has answered yet.</p>'
+
+    grades = [row["grade"] for row in rows]
+    counts_by_grade = dict((row["grade"], row["counts"]) for row in rows)
+    biggest = max(
+        [counts_by_grade[grade].get(category, 0)
+         for grade in grades for category in categories] or [0]) or 1
+
+    blocks = []
+    for index, category in enumerate(categories):
+        colour = SERIES[index % len(SERIES)][0]
+        total = sum(counts_by_grade[grade].get(category, 0) for grade in grades)
+        bar_rows = []
+        for grade in grades:
+            count = counts_by_grade[grade].get(category, 0)
+            width = 100.0 * count / biggest
+            bar_rows.append(
+                '<div class="bar-row">'
+                '<span class="bar-label">%s</span>'
+                '<span class="bar-track"><span class="bar-fill" '
+                'style="width:%.1f%%;background:%s"></span></span>'
+                '<span class="bar-value">%d</span>'
+                '</div>' % (escape(grade), width, colour, count))
+        blocks.append(
+            '<div class="split">'
+            '<h4><span class="swatch" style="background:%s"></span>%s'
+            '<b class="num">%d</b></h4>'
+            '<div class="bars">%s</div></div>'
+            % (colour, escape(category), total, "".join(bar_rows)))
+
+    caption = ('<p class="caption">%d didn\'t answer</p>' % crosstab["skipped"]
+               if crosstab["skipped"] else "")
+    return '<div class="split-grid">%s</div>%s' % ("".join(blocks), caption)
+
+
 def _split_no_response(values):
     """Pull 'No response' out so it cannot flatten the answers that matter.
 
@@ -130,55 +185,6 @@ def _split_no_response(values):
     answered = [(label, count) for label, count in values if label != NO_RESPONSE]
     skipped = sum(count for label, count in values if label == NO_RESPONSE)
     return answered, skipped
-
-
-def _timeline(points):
-    """Cumulative line over per-day bars, drawn as inline SVG."""
-    if not points:
-        return '<p class="empty">No signups yet.</p>'
-
-    width, height = 640, 150
-    pad_x, pad_top, pad_bottom = 18, 14, 30
-    inner_w = width - pad_x * 2
-    inner_h = height - pad_top - pad_bottom
-    peak = max(point["cumulative"] for point in points) or 1
-    daily_peak = max(point["new"] for point in points) or 1
-    single = len(points) < 2
-    step = 0.0 if single else inner_w / float(len(points) - 1)
-
-    def x_at(index):
-        return pad_x + inner_w / 2.0 if single else pad_x + step * index
-
-    # Per-day bars are the association's maroon so they read as a second series
-    # rather than a dimmer version of the gold cumulative line.
-    bars = []
-    for index, point in enumerate(points):
-        bar_h = inner_h * (point["new"] / float(daily_peak)) * 0.62
-        bar_w = 22.0 if single else max(8.0, min(28.0, step * 0.4))
-        bars.append(
-            '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="3" fill="%s"/>'
-            % (x_at(index) - bar_w / 2.0, pad_top + inner_h - bar_h,
-               bar_w, bar_h, MAROON_BAR))
-
-    coords = [(x_at(i), pad_top + inner_h - inner_h * (p["cumulative"] / float(peak)))
-              for i, p in enumerate(points)]
-    line = " ".join("%.1f,%.1f" % point for point in coords)
-    dots = "".join('<circle cx="%.1f" cy="%.1f" r="3.5" fill="%s"/>' % (x, y, GOLD)
-                   for x, y in coords)
-    labels = "".join(
-        '<text x="%.1f" y="%d" class="axis" text-anchor="middle">%s</text>'
-        % (coords[i][0], height - 10, points[i]["date"][5:].replace("-", "/"))
-        for i in range(len(points)))
-
-    return (
-        '<svg viewBox="0 0 %d %d" class="timeline" role="img" '
-        'aria-label="Cumulative signups by day">'
-        '<line x1="%d" y1="%.1f" x2="%d" y2="%.1f" stroke="%s" stroke-width="1"/>'
-        '%s<polyline points="%s" fill="none" stroke="%s" stroke-width="2.5" '
-        'stroke-linejoin="round" stroke-linecap="round"/>%s%s</svg>'
-        % (width, height,
-           pad_x, pad_top + inner_h, width - pad_x, pad_top + inner_h, EDGE,
-           "".join(bars), line, GOLD, dots, labels))
 
 
 def _board_cell(label, value, suffix):
@@ -201,15 +207,34 @@ def _panel(tab, slug, today, is_first):
         _board_cell("Change", delta_value, delta_suffix),
     ])
 
-    cards = ['<section class="card"><h3>By grade</h3>%s</section>'
-             % _bars(metrics.get("grades", []))]
+    # A question broken down by grade supersedes the same question shown flat:
+    # the legend still carries every category total, and the split is the part
+    # that answers "who is in which group".
+    crosstabs = metrics.get("crosstabs", [])
+    by_question = dict((table["question"], table) for table in crosstabs)
+
+    # A breakdown everyone answered already carries the grade totals in its
+    # right-hand column, so the standalone grade card would just repeat itself.
+    # When some people skipped the question the breakdown covers only part of
+    # the field, and the full grade distribution still needs its own card.
+    covered = any(table["skipped"] == 0 for table in crosstabs)
+    cards = [] if covered else [
+        '<section class="card"><h3>By grade</h3>%s</section>'
+        % _bars(metrics.get("grades", []))]
 
     for dimension in metrics.get("dimensions", []):
+        question = dimension["question"]
+        crosstab = by_question.get(question)
+        if crosstab:
+            cards.append(
+                '<section class="card wide"><h3>%s <span class="sub">by grade</span>'
+                '</h3>%s</section>' % (escape(question), _grade_split(crosstab)))
+            continue
         answered, skipped = _split_no_response(dimension["values"])
         caption = ('<p class="caption">%d didn\'t answer</p>' % skipped) if skipped else ""
         cards.append(
             '<section class="card"><h3>%s</h3>%s%s</section>'
-            % (escape(dimension["question"]), _bars(answered), caption))
+            % (escape(question), _bars(answered), caption))
 
     return (
         '<section class="tab-panel%s" id="panel-%s" role="tabpanel" aria-label="%s">'
@@ -219,12 +244,10 @@ def _panel(tab, slug, today, is_first):
         '  </header>'
         '  <div class="board">%s</div>'
         '  <div class="card-grid">%s</div>'
-        '  <section class="card"><h3>Signups over time</h3>%s</section>'
         '</section>'
         % (" is-active" if is_first else "", escape(slug), escape(tab["name"]),
            escape(tab["name"]), escape(event.get("label", "")),
-           board, "".join(cards),
-           _timeline(metrics.get("timeline", []))))
+           board, "".join(cards)))
 
 
 STYLE = """
@@ -237,7 +260,7 @@ Helvetica,Arial,sans-serif;
 html,body{margin:0;padding:0}
 body{background:var(--ground);color:var(--text);font-family:var(--sans);
 -webkit-font-smoothing:antialiased;font-size:15px;line-height:1.45}
-.num,.board-value,.bar-value,.tab-count,.axis{font-family:var(--mono);
+.num,.board-value,.bar-value,.tab-count,.split h4 b{font-family:var(--mono);
 font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
 
 .shell{display:flex;min-height:100vh;align-items:stretch}
@@ -297,7 +320,17 @@ padding:19px 22px;margin-top:16px}
 .card-grid .card{margin-top:0}
 .card h3{margin:0 0 15px;font-size:.66rem;letter-spacing:.19em;
 text-transform:uppercase;color:var(--dim);font-weight:700}
+.card h3 .sub{color:var(--gold);font-weight:700}
+.card.wide{grid-column:1/-1}
 .caption{margin:12px 0 0;font-size:.76rem;color:var(--dim)}
+
+/* ---- one chart per answer, side by side, never combined ---- */
+.split-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+gap:14px 34px}
+.split h4{display:flex;align-items:center;gap:9px;margin:0 0 13px;
+font-size:.86rem;font-weight:700;color:var(--text)}
+.split h4 b{margin-left:auto;color:var(--gold);font-size:.95rem;font-weight:700}
+.swatch{width:11px;height:11px;border-radius:3px;flex:0 0 11px}
 
 /* ---- bars ---- */
 .bar-row{display:grid;grid-template-columns:118px 1fr 34px;align-items:center;
@@ -305,13 +338,11 @@ gap:12px;margin-bottom:9px}
 .bar-row:last-child{margin-bottom:0}
 .bar-label{font-size:.83rem;overflow:hidden;text-overflow:ellipsis;
 white-space:nowrap}
-.bar-track{background:rgba(232,216,184,.07);border-radius:6px;height:11px;
+.bar-track{background:rgba(232,216,184,.07);border-radius:6px;height:15px;
 overflow:hidden}
 .bar-fill{display:block;height:100%%;border-radius:6px;
 background:linear-gradient(90deg,var(--gold-dim),var(--gold))}
 .bar-value{font-size:.86rem;font-weight:700;text-align:right;color:var(--gold)}
-.timeline{width:100%%;height:auto;display:block}
-.axis{fill:var(--dim);font-size:11px}
 .empty{color:var(--dim);font-size:.83rem;margin:0}
 .footer{margin-top:26px;font-size:.72rem;color:var(--dim)}
 
