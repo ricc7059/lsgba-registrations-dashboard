@@ -92,6 +92,27 @@ def _is_publishable_dimension(counter, row_count):
     return True
 
 
+# Answers whose natural order is a rank, not a volume. Anything listed here
+# sorts ahead of everything else in the order given; add to this list when a
+# new question has answers that should read in a set order. Everything not
+# listed falls back to most-common-first.
+LABEL_PRIORITY = [
+    "head coach",
+    "assistant coach",
+]
+
+
+def _value_sort_key(pair):
+    label, count = pair
+    try:
+        rank = LABEL_PRIORITY.index((label or "").strip().lower())
+    except ValueError:
+        # Unranked: highest count first, ties broken alphabetically so the
+        # output is stable between runs.
+        return (1, 0, -count, label)
+    return (0, rank, 0, "")
+
+
 def _crosstab(rows, grade_column, column, ordered_values):
     """Break one already-publishable question down by grade.
 
@@ -156,8 +177,7 @@ def aggregate(parsed):
         counter = collections.Counter(row.get(column) or NO_RESPONSE for row in rows)
         if not _is_publishable_dimension(counter, len(rows)):
             continue
-        # Highest count first; ties broken alphabetically so output is stable.
-        values = sorted(counter.items(), key=lambda pair: (-pair[1], pair[0]))
+        values = sorted(counter.items(), key=_value_sort_key)
         dimensions.append({"question": column, "values": values})
         if grade_column:
             crosstabs.append(

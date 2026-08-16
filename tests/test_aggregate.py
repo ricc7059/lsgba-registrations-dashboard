@@ -172,6 +172,46 @@ class SmallRegistrationLeakTests(unittest.TestCase):
         self.assertEqual(aggregate.aggregate(parsed)["dimensions"], [])
 
 
+class ValueOrderTests(unittest.TestCase):
+    def test_ranked_labels_lead_regardless_of_count(self):
+        # Head Coach outranks Assistant Coach even though fewer people picked it.
+        parsed = {
+            "columns": ["Grade", "Interested in coaching?"],
+            "rows": ([{"Grade": "5th Grade", "Interested in coaching?": "Assistant Coach"}] * 7
+                     + [{"Grade": "6th Grade", "Interested in coaching?": "Head Coach"}]),
+        }
+        values = aggregate.aggregate(parsed)["dimensions"][0]["values"]
+        self.assertEqual([label for label, _ in values],
+                         ["Head Coach", "Assistant Coach"])
+
+    def test_ranking_is_case_insensitive(self):
+        parsed = {
+            "columns": ["Grade", "Role"],
+            "rows": [{"Grade": "5th Grade", "Role": "assistant coach"},
+                     {"Grade": "6th Grade", "Role": "HEAD COACH"}],
+        }
+        values = aggregate.aggregate(parsed)["dimensions"][0]["values"]
+        self.assertEqual(values[0][0], "HEAD COACH")
+
+    def test_unranked_labels_still_sort_by_count(self):
+        parsed = {
+            "columns": ["Grade", "Sessions"],
+            "rows": ([{"Grade": "5th Grade", "Sessions": "Intermediate"}] * 2
+                     + [{"Grade": "6th Grade", "Sessions": "Advanced"}] * 5),
+        }
+        values = aggregate.aggregate(parsed)["dimensions"][0]["values"]
+        self.assertEqual([label for label, _ in values], ["Advanced", "Intermediate"])
+
+    def test_the_crosstab_follows_the_same_order(self):
+        parsed = {
+            "columns": ["Grade", "Interested in coaching?"],
+            "rows": ([{"Grade": "5th Grade", "Interested in coaching?": "Assistant Coach"}] * 7
+                     + [{"Grade": "6th Grade", "Interested in coaching?": "Head Coach"}]),
+        }
+        table = aggregate.aggregate(parsed)["crosstabs"][0]
+        self.assertEqual(table["categories"], ["Head Coach", "Assistant Coach"])
+
+
 class CrosstabTests(unittest.TestCase):
     """Every publishable question also gets broken down by grade."""
 

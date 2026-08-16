@@ -224,6 +224,18 @@ class CrosstabRenderTests(unittest.TestCase):
         self.assertIn('class="bar-track"', html)
         self.assertNotIn('class="figure-row"', html)
 
+    def test_grade_card_is_a_vertical_chart_at_full_width(self):
+        # Grades run along the x axis, and the card spans the grid so it lines
+        # up with the breakdown beneath it.
+        html = render.render_dashboard([_tab_with_crosstab(9)], "now", "2026-08-15")
+        self.assertIn('class="vchart"', html)
+        self.assertEqual(html.count('class="vcol"'), 2)
+        self.assertIn('<section class="card wide"><h3>By grade</h3>', html)
+
+    def test_axis_labels_drop_the_word_grade(self):
+        html = render.render_dashboard([_tab_with_crosstab(9)], "now", "2026-08-15")
+        self.assertIn('<span class="vlabel">3rd</span>', html)
+
     def test_crosstab_output_passes_the_pii_scan(self):
         html = render.render_dashboard([_tab_with_crosstab(3)], "now", "2026-08-15")
         piiscan.assert_clean(html)

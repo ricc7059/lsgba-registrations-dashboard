@@ -108,6 +108,26 @@ def _bars(pairs):
     return '<div class="bars">%s</div>' % "".join(rows)
 
 
+def _columns(pairs):
+    """Vertical bars with the grades along the x axis."""
+    if not pairs:
+        return '<p class="empty">Nothing recorded yet.</p>'
+    top = max(count for _, count in pairs) or 1
+    columns = []
+    for label, count in pairs:
+        height = 100.0 * count / top
+        # "3rd Grade" is too wide for an axis tick at phone width; the full
+        # label stays available on hover and to screen readers.
+        short = label.replace(" Grade", "").strip() or label
+        columns.append(
+            '<div class="vcol" title="%s: %d">'
+            '<span class="vnum">%d</span>'
+            '<span class="vtrack"><span class="vfill" style="height:%.1f%%"></span></span>'
+            '<span class="vlabel">%s</span>'
+            '</div>' % (escape(label), count, count, height, escape(short)))
+    return '<div class="vchart">%s</div>' % "".join(columns)
+
+
 # Below this many in the largest cell, a breakdown is shown as bare numbers:
 # the bars would all be the same length and say nothing.
 MIN_FOR_BARS = 3
@@ -223,8 +243,8 @@ def _panel(tab, slug, today, is_first):
     # the field, and the full grade distribution still needs its own card.
     covered = any(table["skipped"] == 0 for table in crosstabs)
     cards = [] if covered else [
-        '<section class="card"><h3>By grade</h3>%s</section>'
-        % _bars(metrics.get("grades", []))]
+        '<section class="card wide"><h3>By grade</h3>%s</section>'
+        % _columns(metrics.get("grades", []))]
 
     for dimension in metrics.get("dimensions", []):
         question = dimension["question"]
@@ -328,6 +348,21 @@ text-transform:uppercase;color:var(--dim);font-weight:700}
 .card.wide{grid-column:1/-1}
 .caption{margin:12px 0 0;font-size:.76rem;color:var(--dim)}
 
+/* ---- vertical bars, grades along the x axis ---- */
+.vchart{display:flex;align-items:flex-end;gap:clamp(6px,2.4vw,26px);
+padding-top:4px}
+.vcol{flex:1 1 0;min-width:0;display:flex;flex-direction:column;
+align-items:center;gap:7px}
+.vnum{font-family:var(--mono);font-variant-numeric:tabular-nums;
+font-size:.95rem;font-weight:700;color:var(--gold);line-height:1}
+/* the track is a baseline, not a container: a visible box behind each column
+   reads as a stacked bar with an empty upper segment */
+.vtrack{width:100%%;height:clamp(90px,16vw,150px);display:flex;
+align-items:flex-end;border-bottom:1px solid var(--edge)}
+.vfill{width:100%%;border-radius:6px 6px 0 0;min-height:3px;
+background:linear-gradient(180deg,var(--gold),var(--gold-dim))}
+.vlabel{font-size:.78rem;color:var(--text);white-space:nowrap}
+
 /* ---- one chart per answer, side by side, never combined ---- */
 .split-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
 gap:14px 34px}
@@ -360,10 +395,11 @@ background:linear-gradient(90deg,var(--gold-dim),var(--gold))}
 .rail{flex:0 0 auto;border-right:0;border-bottom:1px solid var(--edge);
 padding:18px 16px;gap:16px}
 .rail-foot{margin-top:0}
-.tabs{flex-direction:row;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
-.tabs::-webkit-scrollbar{display:none}
-.tab-button{flex:0 0 auto;white-space:nowrap;border-radius:999px}
-.tab-name{flex:0 0 auto}
+/* wrap rather than scroll: with a scroll strip the active registration can sit
+   off-screen and there is no way to tell which one you are looking at */
+.tabs{flex-direction:row;flex-wrap:wrap;gap:8px}
+.tab-button{flex:1 1 auto;border-radius:999px;padding:9px 15px}
+.tab-name{flex:1 1 auto}
 .main{padding:20px 16px 44px}
 .board{grid-template-columns:1fr}
 .board-cell{border-right:0;border-bottom:1px solid rgba(210,183,124,.18);
