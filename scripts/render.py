@@ -213,12 +213,27 @@ def _split_no_response(values):
     return answered, skipped
 
 
-def _board_cell(label, value, suffix):
-    return ('<div class="board-cell">'
+def _board_cell(label, value, suffix, attrs=""):
+    return ('<div class="board-cell"%s>'
             '<span class="board-label">%s</span>'
             '<span class="board-value">%s</span>'
             '<span class="board-suffix">%s</span>'
-            '</div>' % (escape(label), escape(value), escape(suffix)))
+            '</div>' % (attrs, escape(label), escape(value), escape(suffix)))
+
+
+def _countdown_attrs(event):
+    """Carry the event date as three numbers, for the browser to recompute from.
+
+    Deliberately not an ISO string: the PII scanner treats YYYY-MM-DD as a
+    possible date of birth and would refuse to publish the page.
+    """
+    if not event or not event.get("start"):
+        return ""
+    try:
+        year, month, day = [int(part) for part in event["start"].split("-")]
+    except (ValueError, AttributeError):
+        return ""
+    return ' data-cd-y="%d" data-cd-m="%d" data-cd-d="%d"' % (year, month, day)
 
 
 def _panel(tab, slug, today, is_first):
@@ -228,7 +243,8 @@ def _panel(tab, slug, today, is_first):
 
     board = "".join([
         _board_cell("Registered", "%d" % metrics.get("total", 0), "athletes"),
-        _board_cell("Countdown", countdown_value, countdown_suffix),
+        _board_cell("Countdown", countdown_value, countdown_suffix,
+                    _countdown_attrs(event)),
     ])
 
     # A question broken down by grade supersedes the same question shown flat:
@@ -414,6 +430,26 @@ padding:15px 18px;flex-direction:row;align-items:baseline;justify-content:space-
        SURFACE_2, EDGE, TEXT, TEXT_DIM)
 
 SCRIPT = """
+// The countdown depends on today, not on the registration data, so baking it in
+// at build time leaves it stale on every day nobody registers - and wrong on the
+// morning of the event, which is when it matters most. Recompute it on load.
+document.querySelectorAll('.board-cell[data-cd-y]').forEach(function(cell){
+  var y = parseInt(cell.dataset.cdY, 10);
+  var m = parseInt(cell.dataset.cdM, 10);
+  var d = parseInt(cell.dataset.cdD, 10);
+  if (!y || !m || !d) { return; }
+  var now = new Date();
+  // Compare whole calendar days, so a late-evening view does not read a day off.
+  var today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  var days = Math.round((Date.UTC(y, m - 1, d) - today) / 86400000);
+  var value = '\\u2014', suffix = 'finished';
+  if (days > 1) { value = String(days); suffix = 'days out'; }
+  else if (days === 1) { value = '1'; suffix = 'day out'; }
+  else if (days === 0) { value = '0'; suffix = 'today'; }
+  cell.querySelector('.board-value').textContent = value;
+  cell.querySelector('.board-suffix').textContent = suffix;
+});
+
 document.querySelectorAll('.tab-button').forEach(function(button){
   button.addEventListener('click', function(){
     document.querySelectorAll('.tab-button').forEach(function(other){

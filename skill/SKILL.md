@@ -109,6 +109,11 @@ A warning nobody reads is the same as no warning. Finish with the dashboard URL.
 
 - Never open an order, payment, or discount page. This skill does not report
   financials.
+- Stopping at step 3 leaves nothing stale. The countdown is recomputed in the
+  browser on every page load from the event date, so it stays correct on days
+  nobody registers. Only the counts and the "Updated" stamp are fixed at build
+  time, and those genuinely have not changed. Do not add a daily rebuild to
+  refresh the countdown.
 - A registration with no `event` block in `state.json` renders without a
   countdown. Ask the user for its dates and add them by hand.
 - `--dry-run` on `build.py` writes `index.html` exactly as a normal run does; it

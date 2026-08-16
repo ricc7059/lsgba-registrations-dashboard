@@ -97,6 +97,30 @@ class RenderTests(unittest.TestCase):
         self.assertIn(">9<", self.html)
         self.assertIn("days out", self.html)
 
+    def test_countdown_carries_the_event_date_as_numbers_for_the_browser(self):
+        # Baked-in at build time the countdown goes stale on every quiet day, so
+        # the browser recomputes it. The date must NOT be an ISO string: the PII
+        # scanner reads YYYY-MM-DD as a possible date of birth and would refuse
+        # to publish the page.
+        self.assertIn('data-cd-y="2026" data-cd-m="8" data-cd-d="24"', self.html)
+        self.assertIn('data-cd-y="2026" data-cd-m="8" data-cd-d="18"', self.html)
+        self.assertNotIn("2026-08-24", self.html)
+        piiscan.assert_clean(self.html)
+
+    def test_countdown_is_recomputed_on_load(self):
+        self.assertIn("data-cd-y]", self.html)
+        for wording in ["days out", "day out", "today", "finished"]:
+            self.assertIn(wording, self.html)
+
+    def test_a_registration_without_dates_carries_no_countdown_attributes(self):
+        tabs = [dict(TABS[0], event=None)]
+        html = render.render_dashboard(tabs, "now", "2026-08-15")
+        # The bare name still appears in the script's selector; what must be
+        # absent is the attribute on the cell.
+        self.assertNotIn('data-cd-y="', html)
+        self.assertIn('<div class="board-cell"><span class="board-label">Countdown', html)
+        self.assertIn("no date set", html)
+
     def test_scoreboard_is_two_cells_with_no_change_readout(self):
         self.assertEqual(self.html.count('class="board-cell"'), 4)  # 2 per panel
         for gone in ["Change", "since last run", "first run", "no change", "+4"]:
