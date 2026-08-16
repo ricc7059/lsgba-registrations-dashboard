@@ -96,10 +96,22 @@ class RenderTests(unittest.TestCase):
         self.assertIn("+4", self.html)
 
     def test_shows_no_change_when_delta_is_zero(self):
-        self.assertIn("No change", self.html)
+        # The scoreboard reads as a figure plus a suffix, so a flat run shows
+        # an em dash captioned "no change" rather than the words on their own.
+        self.assertIn("no change", self.html)
 
     def test_shows_the_countdown(self):
-        self.assertIn("9 days", self.html)
+        # Same shape: the digit is the value, "days out" is the suffix.
+        self.assertIn(">9<", self.html)
+        self.assertIn("days out", self.html)
+
+    def test_first_run_reads_as_a_dash_with_a_caption(self):
+        # A tab with no previous count has no delta to show; it must not
+        # render "+0" or an empty cell.
+        tabs = [dict(TABS[0], previous=None, delta=0)]
+        html = render.render_dashboard(tabs, "now", "2026-08-15")
+        self.assertIn("first run", html)
+        self.assertNotIn("+0", html)
 
     def test_renders_dimension_labels(self):
         self.assertIn("Advanced", self.html)
