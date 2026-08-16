@@ -704,7 +704,7 @@ def aggregate(parsed):
 - [ ] **Step 4: Run the tests**
 
 Run: `python3 -m unittest tests.test_aggregate -v`
-Expected: PASS, 14 tests
+Expected: PASS, 15 tests
 
 - [ ] **Step 5: Sanity check against the real exports**
 
@@ -880,8 +880,6 @@ import io
 import json
 import os
 import re
-
-EMPTY = {"lastRun": None, "registrations": {}}
 
 
 def slugify(name):
@@ -1495,11 +1493,10 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_DOWNLOADS = os.path.expanduser("~/Downloads")
 
 
-def build_tabs(data, downloads, active_ids=None):
+def build_tabs(data, downloads):
     tabs = []
     registrations = data.get("registrations", {})
-    ids = active_ids if active_ids is not None else sorted(registrations)
-    for reg_id in ids:
+    for reg_id in sorted(registrations):
         entry = registrations.get(reg_id)
         if not entry or not entry.get("lastExport"):
             continue
