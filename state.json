@@ -12,6 +12,7 @@
       "lastExport": "lsgba-skills-course-2026-08-17-2254.csv",
       "name": "2026 LSGBA / NSA 3 Day Pre-Tryout Skills Course",
       "previousCount": 46,
+      "priority": 1,
       "slug": "skills-course"
     },
     "1126331": {
@@ -25,6 +26,7 @@
       "lastExport": "lsgba-travel-tryout-2026-08-18-1522.csv",
       "name": "2026 LSGBA Travel Tryout Registration",
       "previousCount": 45,
+      "priority": 0,
       "slug": "travel-tryout"
     }
   }

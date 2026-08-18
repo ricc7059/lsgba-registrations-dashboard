@@ -55,6 +55,7 @@ def build_tabs(data, downloads):
             "event": entry.get("event"),
             "delta": entry.get("lastDelta", 0),
             "previous": entry.get("previousCount"),
+            "priority": entry.get("priority", 999),
             "metrics": metrics,
         })
     return tabs, skipped, mismatches

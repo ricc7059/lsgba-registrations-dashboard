@@ -121,10 +121,34 @@ class RenderTests(unittest.TestCase):
         self.assertIn('<div class="board-cell"><span class="board-label">Countdown', html)
         self.assertIn("no date set", html)
 
-    def test_scoreboard_is_two_cells_with_no_change_readout(self):
-        self.assertEqual(self.html.count('class="board-cell"'), 4)  # 2 per panel
+    def test_scoreboard_is_three_cells_with_no_change_readout(self):
+        self.assertEqual(self.html.count('class="board-cell"'), 6)  # 3 per panel
         for gone in ["Change", "since last run", "first run", "no change", "+4"]:
             self.assertNotIn(gone, self.html)
+
+    def test_today_cell_sits_between_registered_and_countdown(self):
+        registered = self.html.index("Registered")
+        today_label = self.html.index("Today")
+        countdown = self.html.index("Countdown")
+        self.assertLess(registered, today_label)
+        self.assertLess(today_label, countdown)
+
+    def test_today_cell_reads_new_signups_for_todays_date(self):
+        tab = dict(TABS[0])
+        tab["metrics"] = dict(tab["metrics"], timeline=[
+            {"date": "2026-08-14", "new": 18, "cumulative": 23},
+            {"date": "2026-08-15", "new": 6, "cumulative": 29},
+        ])
+        html = render.render_dashboard([tab], "now", "2026-08-15")
+        self.assertIn(
+            '<span class="board-label">Today</span><span class="board-value">6</span>',
+            html)
+
+    def test_today_cell_is_zero_when_nobody_signed_up_today(self):
+        # TABS' timelines end before 2026-08-15, the fixture's "today".
+        self.assertIn(
+            '<span class="board-label">Today</span><span class="board-value">0</span>',
+            self.html)
 
     def test_renders_dimension_labels(self):
         self.assertIn("Advanced", self.html)
@@ -185,6 +209,25 @@ def _tab_with_crosstab(skipped):
             "timeline": [{"date": "2026-08-12", "new": 6, "cumulative": 6}],
         },
     }
+
+
+class TabOrderTests(unittest.TestCase):
+    def test_explicit_priority_wins_over_soonest_event(self):
+        # Skills course starts sooner (Aug 18 vs Aug 24) but Travel Tryout is
+        # pinned to priority 0, so it must render, and tab, first regardless.
+        tabs = [dict(t, priority=1) for t in TABS]
+        tabs[0]["priority"] = 0  # travel-tryout
+        html = render.render_dashboard(tabs, "now", "2026-08-15")
+        travel = html.index("2026 LSGBA Travel Tryout Registration")
+        skills = html.index("2026 LSGBA / NSA 3 Day Pre-Tryout Skills Course")
+        self.assertLess(travel, skills)
+
+    def test_missing_priority_falls_back_to_soonest_event(self):
+        tabs = [dict(t) for t in TABS]  # no priority key on either tab
+        html = render.render_dashboard(tabs, "now", "2026-08-15")
+        skills = html.index("2026 LSGBA / NSA 3 Day Pre-Tryout Skills Course")
+        travel = html.index("2026 LSGBA Travel Tryout Registration")
+        self.assertLess(skills, travel)
 
 
 class CrosstabRenderTests(unittest.TestCase):

@@ -236,6 +236,11 @@ def _countdown_attrs(event):
     return ' data-cd-y="%d" data-cd-m="%d" data-cd-d="%d"' % (year, month, day)
 
 
+def _today_count(metrics, today):
+    return next((point["new"] for point in metrics.get("timeline", [])
+                 if point["date"] == today), 0)
+
+
 def _panel(tab, slug, today, is_first):
     metrics = tab["metrics"]
     event = tab.get("event") or {}
@@ -243,6 +248,7 @@ def _panel(tab, slug, today, is_first):
 
     board = "".join([
         _board_cell("Registered", "%d" % metrics.get("total", 0), "athletes"),
+        _board_cell("Today", "%d" % _today_count(metrics, today), "new"),
         _board_cell("Countdown", countdown_value, countdown_suffix,
                     _countdown_attrs(event)),
     ])
@@ -340,7 +346,7 @@ margin-bottom:20px}
 .dates{margin:0;font-size:.83rem;color:var(--dim)}
 
 /* ---- scoreboard ---- */
-.board{display:grid;grid-template-columns:repeat(2,1fr);
+.board{display:grid;grid-template-columns:repeat(3,1fr);
 background:linear-gradient(135deg,var(--maroon) 0%%,var(--maroon-deep) 100%%);
 border:1px solid rgba(210,183,124,.28);border-radius:16px;overflow:hidden}
 .board-cell{padding:20px 22px;border-right:1px solid rgba(210,183,124,.18);
@@ -468,10 +474,14 @@ document.querySelectorAll('.tab-button').forEach(function(button){
 
 
 def _event_sort_key(tab):
-    """Soonest event first; registrations without dates fall to the end."""
+    """Explicit priority first (lower first); ties break by soonest event,
+    then name. Registrations without a priority or date fall to the end."""
     event = tab.get("event") or {}
     start = event.get("start")
-    return (0, start, tab.get("name", "")) if start else (1, "", tab.get("name", ""))
+    priority = tab.get("priority", 999)
+    if start:
+        return (priority, 0, start, tab.get("name", ""))
+    return (priority, 1, "", tab.get("name", ""))
 
 
 def render_dashboard(tabs, generated_at, today):
