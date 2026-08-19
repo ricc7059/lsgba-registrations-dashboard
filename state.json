@@ -1,5 +1,5 @@
 {
-  "lastRun": "2026-08-19T07:38:48-05:00",
+  "lastRun": "2026-08-19T15:11:32-05:00",
   "registrations": {
     "1126197": {
       "event": {
@@ -8,10 +8,10 @@
         "start": "2026-08-18"
       },
       "lastCount": 47,
-      "lastDelta": 1,
-      "lastExport": "lsgba-skills-course-2026-08-17-2254.csv",
+      "lastDelta": 0,
+      "lastExport": "lsgba-skills-course-2026-08-19-1511.csv",
       "name": "2026 LSGBA / NSA 3 Day Pre-Tryout Skills Course",
-      "previousCount": 46,
+      "previousCount": 47,
       "priority": 1,
       "slug": "skills-course"
     },
@@ -21,11 +21,11 @@
         "label": "Aug 24–27",
         "start": "2026-08-24"
       },
-      "lastCount": 51,
-      "lastDelta": 2,
-      "lastExport": "lsgba-travel-tryout-2026-08-19-0738.csv",
+      "lastCount": 52,
+      "lastDelta": 1,
+      "lastExport": "lsgba-travel-tryout-2026-08-19-1510.csv",
       "name": "2026 LSGBA Travel Tryout Registration",
-      "previousCount": 49,
+      "previousCount": 51,
       "priority": 0,
       "slug": "travel-tryout"
     }
