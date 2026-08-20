@@ -1,20 +1,6 @@
 {
   "lastRun": "2026-08-19T16:56:01-05:00",
   "registrations": {
-    "1126197": {
-      "event": {
-        "end": "2026-08-20",
-        "label": "Aug 18–20",
-        "start": "2026-08-18"
-      },
-      "lastCount": 47,
-      "lastDelta": 0,
-      "lastExport": "lsgba-skills-course-2026-08-19-1511.csv",
-      "name": "2026 LSGBA / NSA 3 Day Pre-Tryout Skills Course",
-      "previousCount": 47,
-      "priority": 1,
-      "slug": "skills-course"
-    },
     "1126331": {
       "event": {
         "end": "2026-08-27",
