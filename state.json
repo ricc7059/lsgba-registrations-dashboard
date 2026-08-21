@@ -1,5 +1,5 @@
 {
-  "lastRun": "2026-08-21T09:07:34-05:00",
+  "lastRun": "2026-08-21T12:09:24-05:00",
   "registrations": {
     "1126331": {
       "event": {
@@ -7,11 +7,11 @@
         "label": "Aug 24–27",
         "start": "2026-08-24"
       },
-      "lastCount": 65,
+      "lastCount": 66,
       "lastDelta": 1,
-      "lastExport": "lsgba-travel-tryout-2026-08-21-0907.csv",
+      "lastExport": "lsgba-travel-tryout-2026-08-21-1209.csv",
       "name": "2026 LSGBA Travel Tryout Registration",
-      "previousCount": 64,
+      "previousCount": 65,
       "priority": 0,
       "slug": "travel-tryout"
     }
