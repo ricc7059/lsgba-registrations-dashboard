@@ -141,6 +141,19 @@ export or record step of its own. If no Enabled registration's name contains
 tab is simply omitted — this is normal outside the tryout registration window,
 not an error.
 
+"This season's" day-offset in every chart on this tab is measured from the
+live registration's own opening day, zero-filled by `compare.py` through the
+build's own today — so a same-day registration (e.g. one recorded at 9am and
+built at 11am) is already in the day it belongs to, with no lag. Verified
+directly once (2026-08-22): a single new registrant that day showed up as
+`{"date": "2026-08-22", "new": 1, ...}` in `aggregate.aggregate()`'s
+timeline, as the last day-column in the by-grade heatmap, and as a small
+bar on the daily chart — genuinely a "1"-count bar, easy to mistake for
+missing at a glance next to a 10+ count neighbour, not actually absent. If
+this is ever in doubt again, check `metrics["timeline"][-1]` (or
+`grade_timeline[-1]`) from the just-parsed export directly rather than
+eyeballing the rendered chart.
+
 Last season (2025-26: Aug 11 - Sep 10, 2025, 116 total, including a grade
 breakdown backfilled from a later re-export — see `history.py`'s docstring) is
 frozen in `scripts/history.py` as day-offset counts only — no names, no export
@@ -158,13 +171,10 @@ comparison mean anything:
 
 1. **Cumulative registrations** — both seasons' running totals overlaid.
 2. **Daily registrations** — both seasons' new-per-day counts paired bar by
-   bar, plus last season's after-cutoff window highlighted, with the callout
-   text drawn *inside* that highlighted band rather than as a separate note
-   above the chart — the highlight and its explanation are one visual unit.
-   The chart actually carries **two** callouts side by side, splitting the
-   season at the same cutoff day: one for on-or-before Aug 24 ("through Aug
-   24"), one for after. Both are last season's numbers only (neither is
-   re-evaluated against this season), and each has the same two parts:
+   bar. The chart carries **two** callouts, one for on-or-before Aug 24
+   ("through Aug 24"), one for after, both last season's numbers only
+   (neither is re-evaluated against this season), each with the same two
+   parts:
    - "N registrations {through/after} Aug 24 · X% of last season" — from
      `history.CUTOFF_DAY`/`CUTOFF_LABEL`, as before.
    - "N made a travel team · X%" plus a by-grade breakdown — a one-time
@@ -179,19 +189,17 @@ comparison mean anything:
      private roster file that is never committed, and it never needs to be
      recomputed unless the underlying source files turn out to be wrong.
 
-   Each callout draws its own backdrop card behind its content (see
-   `render._callout_block`) rather than relying on draw order alone. This
-   region of the chart still has real, sometimes-tall bars in it — z-order
-   only keeps a callout from being erased by a bar drawn after it; it does
-   not stop a bar's own count label from visually colliding with callout
-   text at a similar height. A sized backdrop is what actually guarantees
-   it, regardless of how tall this season's bars get as more days come in.
-   The card itself is two columns, not one paragraph: headline stats (the
-   registration count, the made-a-team line) on the left, the grade tally as
-   an actual list -- one row per grade, count right-aligned -- on the right,
-   split by a hairline divider. The card is sized to its own content (not
-   the full highlighted band) and partially transparent (`fill-opacity`,
-   not fully opaque), so a bar can still be seen passing behind it.
+   Only the after-Aug-24 half of the chart gets the highlighted gold
+   background — the before half's callout sits on the plain chart, so
+   "highlighted" keeps meaning one specific thing. Both callouts are small
+   plain text (see `render._callout_block`): headline stats on the left,
+   the grade tally as an actual list — one row per grade, count
+   right-aligned — on the right of a hairline divider, no backdrop box.
+   Text this small and unboxed is legible because it is deliberately kept
+   short and drawn *after* the bars (last in the SVG source, see
+   `_comparison_bar_svg`), not because it is large or has its own card —
+   if a future edit adds more lines here, keep it terse, and keep the
+   draw order last, so a tall bar never paints over it.
 3. **Daily registrations by grade** — a heatmap, one grid per season stacked
    vertically (not a stacked bar chart — that read poorly with this many
    grade categories). Rows are grade, columns are day-offset, and cell shade
