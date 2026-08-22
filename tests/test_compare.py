@@ -63,6 +63,32 @@ class BuildComparisonTests(unittest.TestCase):
         result = compare.build_comparison(metrics, "2026-08-13")
         self.assertEqual(result["domain_days"], history.TIMELINE[-1]["day"])
 
+    def test_no_grade_categories_when_the_export_has_no_grade_column(self):
+        # render.py gates the grade-breakdown card on this list being
+        # non-empty, so an absent grade column must not synthesize one.
+        metrics = {"timeline": [{"date": "2026-08-13", "new": 5, "cumulative": 5}]}
+        result = compare.build_comparison(metrics, "2026-08-13")
+        self.assertEqual(result["this_year_grades"], [])
+        self.assertEqual(result["this_year_grade_days"][0]["counts"], {})
+        self.assertEqual(result["this_year_grade_days"][0]["total"], 0)
+
+    def test_grades_are_sorted_and_every_day_carries_every_grade_at_zero(self):
+        metrics = {
+            "timeline": [{"date": "2026-08-13", "new": 3, "cumulative": 3}],
+            "grade_timeline": [
+                {"date": "2026-08-13", "counts": {"6th Grade": 2, "3rd Grade": 1}},
+            ],
+        }
+        result = compare.build_comparison(metrics, "2026-08-14")
+        self.assertEqual(result["this_year_grades"], ["3rd Grade", "6th Grade"])
+        days = result["this_year_grade_days"]
+        self.assertEqual(days[0]["counts"], {"3rd Grade": 1, "6th Grade": 2})
+        self.assertEqual(days[0]["total"], 3)
+        # Day 1 (Aug 14) has no rows in grade_timeline at all -- still carries
+        # both grades, at zero, rather than a missing key.
+        self.assertEqual(days[1]["counts"], {"3rd Grade": 0, "6th Grade": 0})
+        self.assertEqual(days[1]["total"], 0)
+
     def test_no_iso_date_reaches_the_returned_dict(self):
         metrics = {"timeline": [{"date": "2026-08-13", "new": 5, "cumulative": 5}]}
         result = compare.build_comparison(metrics, "2026-08-15")

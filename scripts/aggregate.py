@@ -195,10 +195,25 @@ def aggregate(parsed):
             running += per_day[iso]
             timeline.append({"date": iso, "new": per_day[iso], "cumulative": running})
 
+    # Day-by-day, broken down by grade -- only possible when the export
+    # carries both a date and a grade column. Counts only, same as timeline.
+    grade_timeline = []
+    if date_column and grade_column:
+        per_day_grade = collections.defaultdict(collections.Counter)
+        for row in rows:
+            iso = parse_registration_date(row.get(date_column, ""))
+            if not iso:
+                continue
+            grade = row.get(grade_column) or NO_RESPONSE
+            per_day_grade[iso][grade] += 1
+        for iso in sorted(per_day_grade):
+            grade_timeline.append({"date": iso, "counts": dict(per_day_grade[iso])})
+
     return {
         "total": len(rows),
         "grades": grades,
         "dimensions": dimensions,
         "crosstabs": [table for table in crosstabs if table],
         "timeline": timeline,
+        "grade_timeline": grade_timeline,
     }

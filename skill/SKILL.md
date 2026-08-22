@@ -149,10 +149,26 @@ If a future season's dashboard should compare against *this* season once it
 closes, freeze this season's numbers into `scripts/history.py` the same way
 (see that file's header) and update `THIS_YEAR_LABEL` in `scripts/compare.py`.
 
-The two charts on that tab overlay the seasons by **day of registration
-window** (day 0 = the day registration opened), not by calendar date — the
-two seasons open a couple of days apart, so a shared day-offset axis is what
-makes the pace comparison mean anything. The daily chart's shaded band and the
-"N registrations came in after Aug 24" callout are last season's numbers
-only, not a per-season comparison; anyone updating the cutoff date should
-change `history.CUTOFF_DAY`/`CUTOFF_LABEL`, not the render code.
+The tab has three charts, all aligned by **day of registration window** (day 0
+= the day registration opened), not by calendar date — the two seasons open a
+couple of days apart, so a shared day-offset axis is what makes the pace
+comparison mean anything:
+
+1. **Cumulative registrations** — both seasons' running totals overlaid.
+2. **Daily registrations** — both seasons' new-per-day counts paired bar by
+   bar, plus last season's shaded "after Aug 24" callout band (last season's
+   numbers only — the cutoff isn't re-evaluated against this season). Anyone
+   moving that cutoff date changes `history.CUTOFF_DAY`/`CUTOFF_LABEL`, not
+   the render code.
+3. **Daily registrations by grade** — this season only, stacked by grade.
+   Last season's export carried no grade column (see history.py), so there is
+   nothing to overlay this one against; the card says so rather than silently
+   comparing against nothing. Dropped entirely on a build where the live
+   export itself has no grade column.
+
+Grade segment colours (`render.GRADE_SERIES`) are deliberately not the same
+maroon/gold used for season identity on the other two charts, so "gold" keeps
+one meaning across the whole tab. If a future season's export renames the
+grade question, `aggregate.py`'s grade-column detection already handles that
+the same way it does for the per-registration "By grade" card — no change
+needed here.

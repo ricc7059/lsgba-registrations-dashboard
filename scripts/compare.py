@@ -15,7 +15,7 @@ publish the page (see render.py's _countdown_attrs for the same rule).
 
 import datetime
 
-from scripts import history
+from scripts import aggregate, history
 
 THIS_YEAR_LABEL = "2026-27"
 
@@ -43,6 +43,27 @@ def _zero_fill(dated_points, start, through):
         running += new
         days.append({"day": day, "label": current.strftime("%b %-d"),
                      "new": new, "cumulative": running})
+        current += datetime.timedelta(days=1)
+        day += 1
+    return days
+
+
+def _zero_fill_by_grade(dated_points, start, through, grades):
+    """Same shape as _zero_fill, but one count per grade per day.
+
+    Every day carries every grade in `grades`, at 0 where nobody in that
+    grade registered that day, so a chart can stack them in a fixed order
+    without a day silently missing a segment.
+    """
+    by_date = dict((point["date"], point["counts"]) for point in dated_points)
+    days = []
+    day = 0
+    current = start
+    while current <= through:
+        counts = by_date.get(current.isoformat(), {})
+        by_grade = dict((grade, counts.get(grade, 0)) for grade in grades)
+        days.append({"day": day, "label": current.strftime("%b %-d"),
+                     "counts": by_grade, "total": sum(by_grade.values())})
         current += datetime.timedelta(days=1)
         day += 1
     return days
@@ -79,6 +100,17 @@ def build_comparison(this_year_metrics, today_iso):
     after_cutoff = sum(point["new"] for point in last_year_days
                         if point["day"] > history.CUTOFF_DAY)
 
+    # Last season's export carried no grade column (see history.py), so this
+    # breakdown only ever exists for the live registration. Empty rather than
+    # missing when the live export has no grade column either, so callers can
+    # test truthiness without a KeyError.
+    grade_points = this_year_metrics.get("grade_timeline") or []
+    this_year_grades = sorted(
+        set(grade for point in grade_points for grade in point["counts"]),
+        key=aggregate.grade_sort_key)
+    this_year_grade_days = _zero_fill_by_grade(
+        grade_points, open_date, through, this_year_grades)
+
     return {
         "this_year_label": THIS_YEAR_LABEL,
         "this_year_open_label": open_date.strftime("%b %-d"),
@@ -97,4 +129,6 @@ def build_comparison(this_year_metrics, today_iso):
         "callout_count": after_cutoff,
         "callout_pct": round(100.0 * after_cutoff / history.TOTAL),
         "domain_days": max(this_year_days[-1]["day"], last_year_max_day),
+        "this_year_grades": this_year_grades,
+        "this_year_grade_days": this_year_grade_days,
     }

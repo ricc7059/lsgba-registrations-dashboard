@@ -141,6 +141,18 @@ SERIES = [
     ("#6E7F8C", "#FFFFFF"),
 ]
 
+# Grade-stack colours for the season-comparison tab, kept off both maroon and
+# gold since those already mean "last season" / "this season" on the two
+# charts above it in that same tab -- reusing either here would put the same
+# hue on two different meanings on one page. This is the reference palette's
+# validated adjacent-pair order (blue, orange, aqua, yellow, magenta, green;
+# see dataviz skill references/palette.md), re-run against this dashboard's
+# own dark surface (#1F2126) rather than assumed: all five checks pass.
+# Grade order is fixed (3rd < 4th < ... via grade_sort_key), so only adjacent
+# stack neighbours are ever compared -- the adjacent-pairlist gate, not
+# all-pairs, is the one that applies to a stacked bar in a fixed order.
+GRADE_SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300"]
+
 
 def _grade_split(crosstab):
     """A separate grade breakdown per answer, never combined into one bar.
@@ -301,16 +313,20 @@ def _comparison_line_svg(c):
 
 
 def _comparison_bar_svg(c):
-    """Last season's daily count, with the after-cutoff window highlighted."""
-    days = c["last_year_days"]
-    n = len(days)
+    """Daily count, this season's bars paired against last season's, on one
+    shared scale -- plus last season's after-cutoff window highlighted."""
+    last_days, this_days = c["last_year_days"], c["this_year_days"]
+    this_by_day = dict((p["day"], p) for p in this_days)
+    n = len(last_days)
     width, height = 860, 170
     pad_x, pad_top, pad_bottom = 20, 16, 26
     inner_w = width - pad_x * 2
     inner_h = height - pad_top - pad_bottom
-    peak = max(p["new"] for p in days) or 1
+    peak = max(max(p["new"] for p in last_days),
+               max((p["new"] for p in this_days), default=0)) or 1
     slot = inner_w / float(n)
-    bar_w = max(4.0, min(16.0, slot * 0.55))
+    pair_w = min(20.0, slot - 6)
+    bar_w = pair_w / 2.0
     cutoff = c["callout_day"]
 
     def cx_at(i):
@@ -325,20 +341,90 @@ def _comparison_bar_svg(c):
         % (band_x0, pad_top, band_x1 - band_x0, inner_h, GOLD,
            band_x0, pad_top, band_x0, pad_top + inner_h, GOLD_DIM))
 
-    peak_idx = max(range(n), key=lambda i: days[i]["new"])
+    peak_idx = max(range(n), key=lambda i: last_days[i]["new"])
     bars = []
-    for i, p in enumerate(days):
+    for i, p in enumerate(last_days):
         bar_h = inner_h * (p["new"] / float(peak))
         by = pad_top + inner_h - bar_h
-        fill = GOLD if i == peak_idx else MAROON_BAR
         bars.append(
-            '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="2.5" fill="%s">'
-            '<title>%s: %d</title></rect>'
-            % (cx_at(i) - bar_w / 2.0, by, bar_w, max(bar_h, 1.5), fill,
-               p["label"], p["new"]))
-    peak_top = pad_top + inner_h - (inner_h * (days[peak_idx]["new"] / float(peak)))
+            '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="2" fill="%s">'
+            '<title>%s season, %s: %d</title></rect>'
+            % (cx_at(i) - bar_w - 1, by, bar_w, max(bar_h, 1.5), MAROON_BAR,
+               c["last_year_label"], p["label"], p["new"]))
+
+        this_point = this_by_day.get(i)
+        if this_point is None:
+            continue
+        this_h = inner_h * (this_point["new"] / float(peak))
+        this_y = pad_top + inner_h - this_h
+        bars.append(
+            '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="2" fill="%s">'
+            '<title>%s season, %s: %d</title></rect>'
+            % (cx_at(i) + 1, this_y, bar_w, max(this_h, 1.5), GOLD,
+               c["this_year_label"], this_point["label"], this_point["new"]))
+
+    peak_top = pad_top + inner_h - (inner_h * (last_days[peak_idx]["new"] / float(peak)))
     peak_label = ('<text x="%.1f" y="%.1f" class="cmp-end-label" text-anchor="middle">'
-                 '%d</text>' % (cx_at(peak_idx), peak_top - 8, days[peak_idx]["new"]))
+                 '%d</text>' % (cx_at(peak_idx) - bar_w / 2.0 - 1, peak_top - 8,
+                                 last_days[peak_idx]["new"]))
+
+    day_ticks = list(range(0, n, 5))
+    if n - 1 not in day_ticks:
+        day_ticks.append(n - 1)
+    labels = "".join(
+        '<text x="%.1f" y="%d" class="axis" text-anchor="middle">%s</text>'
+        % (cx_at(d), height - 8, last_days[d]["label"])
+        for d in day_ticks)
+
+    return (
+        '<svg viewBox="0 0 %d %d" class="timeline cmp-timeline" role="img" '
+        'aria-label="Daily registrations, this season vs last season, with the '
+        'after-%s callout">'
+        '<line x1="%d" y1="%.1f" x2="%d" y2="%.1f" stroke="%s" stroke-width="1"/>'
+        '%s%s%s%s</svg>'
+        % (width, height, c["callout_label"],
+           pad_x, pad_top + inner_h, width - pad_x, pad_top + inner_h, EDGE,
+           band, "".join(bars), peak_label, labels))
+
+
+def _comparison_grade_bar_svg(c):
+    """This season's daily registrations, stacked by grade.
+
+    Last season's export carried no grade column (scripts/history.py), so
+    there is nothing to overlay this against -- it is this season only.
+    """
+    days = c["this_year_grade_days"]
+    grades = c["this_year_grades"]
+    n = len(days)
+    width, height = 860, 190
+    pad_x, pad_top, pad_bottom = 20, 16, 26
+    inner_w = width - pad_x * 2
+    inner_h = height - pad_top - pad_bottom
+    peak = max((p["total"] for p in days), default=0) or 1
+    slot = inner_w / float(n)
+    bar_w = min(20.0, slot - 6)
+    gap = 1.5  # a surface-colour seam between stacked segments
+
+    def cx_at(i):
+        return pad_x + slot * i + slot / 2.0
+
+    segments = []
+    for i, p in enumerate(days):
+        y_cursor = pad_top + inner_h
+        for g_index, grade in enumerate(grades):
+            count = p["counts"].get(grade, 0)
+            if not count:
+                continue
+            raw_h = inner_h * (count / float(peak))
+            seg_top = y_cursor - raw_h
+            visible_h = max(raw_h - gap, 1.0)
+            colour = GRADE_SERIES[g_index % len(GRADE_SERIES)]
+            segments.append(
+                '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="1.5" fill="%s">'
+                '<title>%s, %s: %d</title></rect>'
+                % (cx_at(i) - bar_w / 2.0, seg_top, bar_w, visible_h, colour,
+                   escape(grade), p["label"], count))
+            y_cursor = seg_top
 
     day_ticks = list(range(0, n, 5))
     if n - 1 not in day_ticks:
@@ -350,12 +436,33 @@ def _comparison_bar_svg(c):
 
     return (
         '<svg viewBox="0 0 %d %d" class="timeline cmp-timeline" role="img" '
-        'aria-label="Daily registrations last season, with the after-%s callout">'
+        'aria-label="This season\'s daily registrations, stacked by grade">'
         '<line x1="%d" y1="%.1f" x2="%d" y2="%.1f" stroke="%s" stroke-width="1"/>'
-        '%s%s%s%s</svg>'
-        % (width, height, c["callout_label"],
+        '%s%s</svg>'
+        % (width, height,
            pad_x, pad_top + inner_h, width - pad_x, pad_top + inner_h, EDGE,
-           band, "".join(bars), peak_label, labels))
+           "".join(segments), labels))
+
+
+def _cmp_series_legend(c):
+    return (
+        '<div class="cmp-legend">'
+        '<span class="cmp-legend-item"><span class="cmp-legend-key cmp-last"></span>'
+        '%s season &middot; final %d</span>'
+        '<span class="cmp-legend-item"><span class="cmp-legend-key cmp-this"></span>'
+        '%s season &middot; %d to date</span>'
+        '</div>'
+        % (escape(c["last_year_label"]), c["last_year_total"],
+           escape(c["this_year_label"]), c["this_year_total"]))
+
+
+def _cmp_grade_legend(c):
+    items = "".join(
+        '<span class="cmp-legend-item"><span class="cmp-legend-key" '
+        'style="background:%s"></span>%s</span>'
+        % (GRADE_SERIES[i % len(GRADE_SERIES)], escape(grade))
+        for i, grade in enumerate(c["this_year_grades"]))
+    return '<div class="cmp-legend">%s</div>' % items
 
 
 def _comparison_panel(tab, slug, is_first):
@@ -372,21 +479,22 @@ def _comparison_panel(tab, slug, is_first):
                                         c["last_year_close_label"], c["last_year_label"])),
     ])
 
-    legend = (
-        '<div class="cmp-legend">'
-        '<span class="cmp-legend-item"><span class="cmp-legend-key cmp-last"></span>'
-        '%s season &middot; final %d</span>'
-        '<span class="cmp-legend-item"><span class="cmp-legend-key cmp-this"></span>'
-        '%s season &middot; %d to date</span>'
-        '</div>'
-        % (escape(c["last_year_label"]), c["last_year_total"],
-           escape(c["this_year_label"]), c["this_year_total"]))
-
     callout_note = (
         '<p class="cmp-note">%d of %d registrations last season (%d%%) came in '
         'after %s.</p>'
         % (c["callout_count"], c["last_year_total"], c["callout_pct"],
            escape(c["callout_label"])))
+
+    grade_card = ""
+    if c["this_year_grades"]:
+        grade_card = (
+            '  <section class="card wide"><h3>Daily registrations by grade '
+            '<span class="sub">%s season only</span></h3>'
+            '<p class="cmp-note">Last season\'s export carried no grade field, '
+            'so this breakdown has nothing to compare it against.</p>'
+            '%s%s</section>'
+            % (escape(c["this_year_label"]), _cmp_grade_legend(c),
+               _comparison_grade_bar_svg(c)))
 
     return (
         '<section class="tab-panel%s" id="panel-%s" role="tabpanel" aria-label="%s">'
@@ -400,14 +508,16 @@ def _comparison_panel(tab, slug, is_first):
         '<span class="sub">both seasons, aligned by day of registration window</span>'
         '</h3>%s%s</section>'
         '  <section class="card wide"><h3>Daily registrations '
-        '<span class="sub">%s season</span></h3>%s%s</section>'
+        '<span class="sub">this season vs last season</span></h3>%s%s%s</section>'
+        '%s'
         '</section>'
         % (" is-active" if is_first else "", escape(slug), escape(tab["name"]),
            escape(tab["name"]),
            escape(c["last_year_open_label"]), escape(c["this_year_open_label"]),
            board,
-           legend, _comparison_line_svg(c),
-           escape(c["last_year_label"]), callout_note, _comparison_bar_svg(c)))
+           _cmp_series_legend(c), _comparison_line_svg(c),
+           _cmp_series_legend(c), callout_note, _comparison_bar_svg(c),
+           grade_card))
 
 
 def _countdown_attrs(event):

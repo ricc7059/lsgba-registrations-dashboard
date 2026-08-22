@@ -341,6 +341,13 @@ def _comparison_tab():
             "callout_count": 47,
             "callout_pct": 41,
             "domain_days": 2,
+            "this_year_grades": ["3rd Grade", "4th Grade"],
+            "this_year_grade_days": [
+                {"day": 0, "label": "Aug 13",
+                 "counts": {"3rd Grade": 3, "4th Grade": 2}, "total": 5},
+                {"day": 1, "label": "Aug 14",
+                 "counts": {"3rd Grade": 40, "4th Grade": 21}, "total": 61},
+            ],
         },
     }
 
@@ -349,8 +356,29 @@ class ComparisonPanelTests(unittest.TestCase):
     def setUp(self):
         self.html = render.render_dashboard([_comparison_tab()], "now", "2026-08-14")
 
-    def test_renders_two_svg_charts(self):
-        self.assertEqual(self.html.count("<svg"), 2)
+    def test_renders_three_svg_charts(self):
+        # Cumulative overlay, daily overlay, and the grade breakdown.
+        self.assertEqual(self.html.count("<svg"), 3)
+
+    def test_grade_breakdown_is_dropped_when_last_seasons_export_had_no_grade_column(self):
+        tab = _comparison_tab()
+        tab["comparison"] = dict(tab["comparison"], this_year_grades=[],
+                                 this_year_grade_days=[])
+        html = render.render_dashboard([tab], "now", "2026-08-14")
+        self.assertEqual(html.count("<svg"), 2)
+        self.assertNotIn("by grade", html)
+
+    def test_renders_a_grade_legend_with_each_grade_in_sorted_order(self):
+        self.assertIn("3rd Grade", self.html)
+        self.assertIn("4th Grade", self.html)
+        third = self.html.index("3rd Grade")
+        fourth = self.html.index("4th Grade")
+        self.assertLess(third, fourth)
+
+    def test_every_chart_card_gets_its_own_legend(self):
+        # Cumulative, daily overlay, and the grade breakdown each carry a
+        # legend -- not just the cumulative chart at the top.
+        self.assertEqual(self.html.count('<div class="cmp-legend">'), 3)
 
     def test_renders_a_legend_for_both_seasons(self):
         self.assertIn("cmp-legend", self.html)
