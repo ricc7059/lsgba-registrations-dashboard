@@ -141,18 +141,6 @@ SERIES = [
     ("#6E7F8C", "#FFFFFF"),
 ]
 
-# Grade-stack colours for the season-comparison tab, kept off both maroon and
-# gold since those already mean "last season" / "this season" on the two
-# charts above it in that same tab -- reusing either here would put the same
-# hue on two different meanings on one page. This is the reference palette's
-# validated adjacent-pair order (blue, orange, aqua, yellow, magenta, green;
-# see dataviz skill references/palette.md), re-run against this dashboard's
-# own dark surface (#1F2126) rather than assumed: all five checks pass.
-# Grade order is fixed (3rd < 4th < ... via grade_sort_key), so only adjacent
-# stack neighbours are ever compared -- the adjacent-pairlist gate, not
-# all-pairs, is the one that applies to a stacked bar in a fixed order.
-GRADE_SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300"]
-
 
 def _grade_split(crosstab):
     """A separate grade breakdown per answer, never combined into one bar.
@@ -334,12 +322,19 @@ def _comparison_bar_svg(c):
 
     band_x0 = pad_x + slot * (cutoff + 1)
     band_x1 = pad_x + inner_w
+    band_mid_x = (band_x0 + band_x1) / 2.0
     band = (
         '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" opacity="0.10"/>'
         '<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="1" '
         'stroke-dasharray="3 3"/>'
+        '<text x="%.1f" y="%.1f" class="cmp-callout-title" text-anchor="middle">'
+        '%d registrations</text>'
+        '<text x="%.1f" y="%.1f" class="cmp-callout-sub" text-anchor="middle">'
+        'after %s &middot; %d%% of last season</text>'
         % (band_x0, pad_top, band_x1 - band_x0, inner_h, GOLD,
-           band_x0, pad_top, band_x0, pad_top + inner_h, GOLD_DIM))
+           band_x0, pad_top, band_x0, pad_top + inner_h, GOLD_DIM,
+           band_mid_x, pad_top + 20, c["callout_count"],
+           band_mid_x, pad_top + 35, escape(c["callout_label"]), c["callout_pct"]))
 
     peak_idx = max(range(n), key=lambda i: last_days[i]["new"])
     bars = []
@@ -387,61 +382,60 @@ def _comparison_bar_svg(c):
            band, "".join(bars), peak_label, labels))
 
 
-def _comparison_grade_bar_svg(c):
-    """This season's daily registrations, stacked by grade.
+def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season_label):
+    """One season's day-by-grade grid. Colour is fixed (the season's own
+    identity hue, matching the other two charts); fill-opacity carries the
+    count, on a scale the caller shares across both seasons' grids so
+    "darker" means the same thing in both.
 
-    Last season's export carried no grade column (scripts/history.py), so
-    there is nothing to overlay this against -- it is this season only.
+    `days` only needs to cover the days that season actually has -- a day
+    beyond it (this season, before it happens) draws no cell at all rather
+    than a zero, so "not yet known" reads differently from "genuinely zero".
     """
-    days = c["this_year_grade_days"]
-    grades = c["this_year_grades"]
-    n = len(days)
-    width, height = 860, 190
-    pad_x, pad_top, pad_bottom = 20, 16, 26
-    inner_w = width - pad_x * 2
-    inner_h = height - pad_top - pad_bottom
-    peak = max((p["total"] for p in days), default=0) or 1
-    slot = inner_w / float(n)
-    bar_w = min(20.0, slot - 6)
-    gap = 1.5  # a surface-colour seam between stacked segments
+    n_cols = domain_days + 1
+    width = 860
+    pad_left, pad_top, pad_right, pad_bottom = 46, 6, 14, 22
+    row_h, row_gap = 20, 2
+    rows = len(grades)
+    height = pad_top + rows * (row_h + row_gap) - row_gap + pad_bottom
+    inner_w = width - pad_left - pad_right
+    slot = inner_w / float(n_cols)
+    cell_w = max(slot - 2, 1.0)
 
-    def cx_at(i):
-        return pad_x + slot * i + slot / 2.0
+    def cx(day_i):
+        return pad_left + slot * day_i
 
-    segments = []
-    for i, p in enumerate(days):
-        y_cursor = pad_top + inner_h
-        for g_index, grade in enumerate(grades):
+    def cy(row_i):
+        return pad_top + row_i * (row_h + row_gap)
+
+    cells = [
+        '<text x="%.1f" y="%.1f" class="axis" text-anchor="end">%s</text>'
+        % (pad_left - 8, cy(row_i) + row_h / 2.0 + 3, escape(grade))
+        for row_i, grade in enumerate(grades)
+    ]
+    for p in days:
+        for row_i, grade in enumerate(grades):
             count = p["counts"].get(grade, 0)
-            if not count:
-                continue
-            raw_h = inner_h * (count / float(peak))
-            seg_top = y_cursor - raw_h
-            visible_h = max(raw_h - gap, 1.0)
-            colour = GRADE_SERIES[g_index % len(GRADE_SERIES)]
-            segments.append(
-                '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="1.5" fill="%s">'
+            opacity = 0.0 if not count else max(0.16, min(1.0, count / float(max_count)))
+            cells.append(
+                '<rect x="%.1f" y="%.1f" width="%.1f" height="%d" rx="2" '
+                'fill="%s" fill-opacity="%.2f" stroke="%s" stroke-width="1">'
                 '<title>%s, %s: %d</title></rect>'
-                % (cx_at(i) - bar_w / 2.0, seg_top, bar_w, visible_h, colour,
-                   escape(grade), p["label"], count))
-            y_cursor = seg_top
+                % (cx(p["day"]), cy(row_i), cell_w, row_h, colour, opacity,
+                   EDGE, escape(grade), p["label"], count))
 
-    day_ticks = list(range(0, n, 5))
-    if n - 1 not in day_ticks:
-        day_ticks.append(n - 1)
+    day_ticks = list(range(0, n_cols, 5))
+    if n_cols - 1 not in day_ticks:
+        day_ticks.append(n_cols - 1)
     labels = "".join(
         '<text x="%.1f" y="%d" class="axis" text-anchor="middle">%s</text>'
-        % (cx_at(d), height - 8, days[d]["label"])
-        for d in day_ticks)
+        % (cx(d) + cell_w / 2.0, height - 6, days[d]["label"])
+        for d in day_ticks if d < len(days))
 
     return (
-        '<svg viewBox="0 0 %d %d" class="timeline cmp-timeline" role="img" '
-        'aria-label="This season\'s daily registrations, stacked by grade">'
-        '<line x1="%d" y1="%.1f" x2="%d" y2="%.1f" stroke="%s" stroke-width="1"/>'
-        '%s%s</svg>'
-        % (width, height,
-           pad_x, pad_top + inner_h, width - pad_x, pad_top + inner_h, EDGE,
-           "".join(segments), labels))
+        '<svg viewBox="0 0 %d %d" class="timeline cmp-heatmap" role="img" '
+        'aria-label="%s registrations by day and grade">%s%s</svg>'
+        % (width, height, escape(season_label), "".join(cells), labels))
 
 
 def _cmp_series_legend(c):
@@ -454,15 +448,6 @@ def _cmp_series_legend(c):
         '</div>'
         % (escape(c["last_year_label"]), c["last_year_total"],
            escape(c["this_year_label"]), c["this_year_total"]))
-
-
-def _cmp_grade_legend(c):
-    items = "".join(
-        '<span class="cmp-legend-item"><span class="cmp-legend-key" '
-        'style="background:%s"></span>%s</span>'
-        % (GRADE_SERIES[i % len(GRADE_SERIES)], escape(grade))
-        for i, grade in enumerate(c["this_year_grades"]))
-    return '<div class="cmp-legend">%s</div>' % items
 
 
 def _comparison_panel(tab, slug, is_first):
@@ -479,22 +464,30 @@ def _comparison_panel(tab, slug, is_first):
                                         c["last_year_close_label"], c["last_year_label"])),
     ])
 
-    callout_note = (
-        '<p class="cmp-note">%d of %d registrations last season (%d%%) came in '
-        'after %s.</p>'
-        % (c["callout_count"], c["last_year_total"], c["callout_pct"],
-           escape(c["callout_label"])))
-
     grade_card = ""
-    if c["this_year_grades"]:
+    if c["grades"]:
+        max_count = max(
+            [count for p in c["this_year_grade_days"] for count in p["counts"].values()]
+            + [count for p in c["last_year_grade_days"] for count in p["counts"].values()]
+            or [0]) or 1
+        last_heatmap = _comparison_heatmap_svg(
+            c["last_year_grade_days"], c["grades"], MAROON_BAR, max_count,
+            c["domain_days"], c["last_year_label"])
+        this_heatmap = _comparison_heatmap_svg(
+            c["this_year_grade_days"], c["grades"], GOLD, max_count,
+            c["domain_days"], c["this_year_label"])
         grade_card = (
             '  <section class="card wide"><h3>Daily registrations by grade '
-            '<span class="sub">%s season only</span></h3>'
-            '<p class="cmp-note">Last season\'s export carried no grade field, '
-            'so this breakdown has nothing to compare it against.</p>'
-            '%s%s</section>'
-            % (escape(c["this_year_label"]), _cmp_grade_legend(c),
-               _comparison_grade_bar_svg(c)))
+            '<span class="sub">both seasons, same day-and-grade scale</span></h3>'
+            '<p class="cmp-heatmap-label"><span class="cmp-legend-key cmp-last"></span>'
+            '%s season</p>%s'
+            '<p class="cmp-heatmap-label"><span class="cmp-legend-key cmp-this"></span>'
+            '%s season</p>%s'
+            '<p class="cmp-note">Darker = more registrations that day; both grids '
+            'share the same 0&ndash;%d scale.</p>'
+            '</section>'
+            % (escape(c["last_year_label"]), last_heatmap,
+               escape(c["this_year_label"]), this_heatmap, max_count))
 
     return (
         '<section class="tab-panel%s" id="panel-%s" role="tabpanel" aria-label="%s">'
@@ -508,7 +501,7 @@ def _comparison_panel(tab, slug, is_first):
         '<span class="sub">both seasons, aligned by day of registration window</span>'
         '</h3>%s%s</section>'
         '  <section class="card wide"><h3>Daily registrations '
-        '<span class="sub">this season vs last season</span></h3>%s%s%s</section>'
+        '<span class="sub">this season vs last season</span></h3>%s%s</section>'
         '%s'
         '</section>'
         % (" is-active" if is_first else "", escape(slug), escape(tab["name"]),
@@ -516,7 +509,7 @@ def _comparison_panel(tab, slug, is_first):
            escape(c["last_year_open_label"]), escape(c["this_year_open_label"]),
            board,
            _cmp_series_legend(c), _comparison_line_svg(c),
-           _cmp_series_legend(c), callout_note, _comparison_bar_svg(c),
+           _cmp_series_legend(c), _comparison_bar_svg(c),
            grade_card))
 
 
@@ -726,6 +719,13 @@ color:var(--dim)}
 .cmp-end-label{font-family:var(--mono);font-variant-numeric:tabular-nums;
 font-size:.8rem;font-weight:700;fill:var(--gold)}
 .cmp-hit{fill:transparent}
+.cmp-callout-title{font-family:var(--mono);font-variant-numeric:tabular-nums;
+font-size:15px;font-weight:800;fill:var(--gold)}
+.cmp-callout-sub{font-size:10.5px;fill:var(--dim)}
+.cmp-heatmap-label{display:flex;align-items:center;gap:8px;margin:14px 0 4px;
+font-size:.78rem;color:var(--dim)}
+.cmp-heatmap-label:first-of-type{margin-top:0}
+.cmp-heatmap .axis{font-size:9.5px}
 
 @media(max-width:860px){
 .shell{flex-direction:column}

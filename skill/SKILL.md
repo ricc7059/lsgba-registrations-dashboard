@@ -141,34 +141,44 @@ export or record step of its own. If no Enabled registration's name contains
 tab is simply omitted — this is normal outside the tryout registration window,
 not an error.
 
-Last season (2025-26: Aug 11 - Sep 10, 2025, 116 total) is frozen in
-`scripts/history.py` as day-offset counts only — no names, no export file, no
-raw CSV. That export is gone and the season will not reopen, so this data
-never changes; it does not need to be, and cannot be, refreshed by this skill.
-If a future season's dashboard should compare against *this* season once it
-closes, freeze this season's numbers into `scripts/history.py` the same way
-(see that file's header) and update `THIS_YEAR_LABEL` in `scripts/compare.py`.
+Last season (2025-26: Aug 11 - Sep 10, 2025, 116 total, including a grade
+breakdown backfilled from a later re-export — see `history.py`'s docstring) is
+frozen in `scripts/history.py` as day-offset counts only — no names, no export
+file, no raw CSV. That export is gone and the season will not reopen, so this
+data never changes; it does not need to be, and cannot be, refreshed by this
+skill. If a future season's dashboard should compare against *this* season
+once it closes, freeze this season's numbers into `scripts/history.py` the
+same way (see that file's header) and update `THIS_YEAR_LABEL` in
+`scripts/compare.py`.
 
-The tab has three charts, all aligned by **day of registration window** (day 0
+The tab has four charts, all aligned by **day of registration window** (day 0
 = the day registration opened), not by calendar date — the two seasons open a
 couple of days apart, so a shared day-offset axis is what makes the pace
 comparison mean anything:
 
 1. **Cumulative registrations** — both seasons' running totals overlaid.
 2. **Daily registrations** — both seasons' new-per-day counts paired bar by
-   bar, plus last season's shaded "after Aug 24" callout band (last season's
-   numbers only — the cutoff isn't re-evaluated against this season). Anyone
-   moving that cutoff date changes `history.CUTOFF_DAY`/`CUTOFF_LABEL`, not
+   bar, plus last season's after-cutoff window highlighted, with the callout
+   text ("N registrations after Aug 24 · X% of last season") drawn *inside*
+   that highlighted band rather than as a separate note above the chart —
+   the highlight and its explanation are one visual unit. That callout is
+   last season's numbers only, not re-evaluated against this season; anyone
+   moving the cutoff date changes `history.CUTOFF_DAY`/`CUTOFF_LABEL`, not
    the render code.
-3. **Daily registrations by grade** — this season only, stacked by grade.
-   Last season's export carried no grade column (see history.py), so there is
-   nothing to overlay this one against; the card says so rather than silently
-   comparing against nothing. Dropped entirely on a build where the live
-   export itself has no grade column.
+3. **Daily registrations by grade** — a heatmap, one grid per season stacked
+   vertically (not a stacked bar chart — that read poorly with this many
+   grade categories). Rows are grade, columns are day-offset, and cell shade
+   is that season's own identity colour (maroon for last season, gold for
+   this season) at an opacity scaled to the count, on one shared 0–max scale
+   across both grids so "darker" means the same thing in both. This season's
+   grid only draws cells through today — a day that hasn't happened yet stays
+   blank rather than reading as a false zero.
 
-Grade segment colours (`render.GRADE_SERIES`) are deliberately not the same
-maroon/gold used for season identity on the other two charts, so "gold" keeps
-one meaning across the whole tab. If a future season's export renames the
-grade question, `aggregate.py`'s grade-column detection already handles that
-the same way it does for the per-registration "By grade" card — no change
-needed here.
+Both seasons' exports spell grade differently ("3rd Grade" this season, "3rd"
+last season, per each export's own grade question) — `compare.py` normalizes
+both to the short form before matching a row across seasons, so this doesn't
+split into two rows. If a future season's export renames the grade question,
+`aggregate.py`'s grade-column detection already handles that the same way it
+does for the per-registration "By grade" card; the label just needs to keep
+ending in some form of "Grade" (or not) for the normalizer to strip it — see
+`compare._normalize_grade`.

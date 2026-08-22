@@ -5,8 +5,12 @@ Aggregate counts only, derived once (via scripts/aggregate.py) from the closed
 long gone from ~/Downloads; this is its already-PII-free output, kept here
 because last season's registration window will never reopen, so there is no
 live file to re-derive it from. No name, order, or row-level data survives --
-only a per-day new/cumulative count, exactly what aggregate.aggregate() would
-hand back for any other registration.
+only per-day new/cumulative/grade counts, exactly what aggregate.aggregate()
+would hand back for any other registration.
+
+The original 2025-26 export carried no grade column; GRADE_TIMELINE below was
+backfilled from a later re-export that added one (same 116 rows, same dates --
+verified against TIMELINE's day-by-day totals before replacing this file).
 """
 
 LABEL = "2025-26"
@@ -53,3 +57,42 @@ TIMELINE = [
 # on the daily chart sums everything with day > CUTOFF_DAY.
 CUTOFF_DAY = 13
 CUTOFF_LABEL = "Aug 24"
+
+# Grade breakdown by day-offset, only for days with at least one registration
+# -- a day absent here carried zero for every grade, same convention as
+# aggregate.aggregate()'s grade_timeline. Grade labels are the export's own
+# short form ("3rd", not "3rd Grade"); compare.py normalizes both seasons to
+# this form before matching them up. The 2025-26 export originally carried no
+# grade column at all (see the module docstring history) -- re-export added
+# one, so this is filled in from that re-export, same aggregate-only rule as
+# everything else here.
+GRADE_TIMELINE = [
+    {"day": 0, "counts": {"4th": 1, "6th": 2, "8th": 1}},
+    {"day": 1, "counts": {"3rd": 7, "4th": 3, "5th": 7, "6th": 4, "7th": 3, "8th": 4}},
+    {"day": 2, "counts": {"4th": 1, "5th": 5, "7th": 1}},
+    {"day": 3, "counts": {"3rd": 2, "4th": 2, "8th": 1}},
+    {"day": 4, "counts": {"5th": 2, "8th": 1}},
+    {"day": 5, "counts": {"4th": 1}},
+    {"day": 6, "counts": {"5th": 1, "7th": 2}},
+    {"day": 7, "counts": {"3rd": 2, "4th": 1, "5th": 2, "6th": 1}},
+    {"day": 8, "counts": {"7th": 1}},
+    {"day": 9, "counts": {"5th": 2, "6th": 1}},
+    {"day": 10, "counts": {"3rd": 1, "5th": 1, "8th": 1}},
+    {"day": 12, "counts": {"2nd": 1, "3rd": 2, "4th": 1, "5th": 1}},
+    {"day": 15, "counts": {"4th": 1, "5th": 1}},
+    {"day": 16, "counts": {"3rd": 1, "5th": 1}},
+    {"day": 17, "counts": {"4th": 1}},
+    {"day": 18, "counts": {"2nd": 1, "3rd": 3, "7th": 1}},
+    {"day": 19, "counts": {"3rd": 1, "4th": 1, "5th": 1, "6th": 1}},
+    {"day": 20, "counts": {"3rd": 1}},
+    {"day": 21, "counts": {"3rd": 1, "4th": 2}},
+    {"day": 22, "counts": {"3rd": 1, "6th": 1}},
+    {"day": 23, "counts": {"3rd": 1, "7th": 1}},
+    {"day": 24, "counts": {"3rd": 1, "5th": 2, "7th": 1, "8th": 1}},
+    {"day": 25, "counts": {"6th": 1, "7th": 1, "8th": 2}},
+    {"day": 26, "counts": {"3rd": 2, "6th": 2}},
+    {"day": 27, "counts": {"5th": 1, "6th": 1, "7th": 1}},
+    {"day": 28, "counts": {"4th": 1, "5th": 1, "7th": 2}},
+    {"day": 29, "counts": {"5th": 1, "8th": 2}},
+    {"day": 30, "counts": {"5th": 1, "7th": 1}},
+]

@@ -14,10 +14,32 @@ publish the page (see render.py's _countdown_attrs for the same rule).
 """
 
 import datetime
+import re
 
 from scripts import aggregate, history
 
 THIS_YEAR_LABEL = "2026-27"
+
+# The two seasons' exports spell grade differently ("3rd Grade" this season,
+# "3rd" last season, per each export's own grade question) -- normalize both
+# to the short form before comparing, so a heatmap row lines up across seasons
+# instead of splitting into two rows that mean the same grade.
+_GRADE_SUFFIX_RE = re.compile(r"\s*grade\s*$", re.IGNORECASE)
+
+
+def _normalize_grade(label):
+    return _GRADE_SUFFIX_RE.sub("", label or "").strip()
+
+
+def _normalize_grade_points(points):
+    normalized = []
+    for point in points:
+        counts = {}
+        for grade, count in point["counts"].items():
+            key = _normalize_grade(grade)
+            counts[key] = counts.get(key, 0) + count
+        normalized.append(dict(point, counts=counts))
+    return normalized
 
 
 def _parse_iso(value):
@@ -69,6 +91,19 @@ def _zero_fill_by_grade(dated_points, start, through, grades):
     return days
 
 
+def _grade_days_from_offsets(points_by_day, grades, max_day, day_labels):
+    """Same shape as _zero_fill_by_grade, but for history.py's day-offset-
+    keyed points rather than the live export's date-keyed ones."""
+    by_day = dict((point["day"], point["counts"]) for point in points_by_day)
+    days = []
+    for day in range(max_day + 1):
+        counts = by_day.get(day, {})
+        by_grade = dict((grade, counts.get(grade, 0)) for grade in grades)
+        days.append({"day": day, "label": day_labels[day]["label"],
+                     "counts": by_grade, "total": sum(by_grade.values())})
+    return days
+
+
 def _cumulative_at(days, day_index):
     """The last known cumulative at or before day_index; 0 before the series starts."""
     value = 0
@@ -100,16 +135,20 @@ def build_comparison(this_year_metrics, today_iso):
     after_cutoff = sum(point["new"] for point in last_year_days
                         if point["day"] > history.CUTOFF_DAY)
 
-    # Last season's export carried no grade column (see history.py), so this
-    # breakdown only ever exists for the live registration. Empty rather than
-    # missing when the live export has no grade column either, so callers can
-    # test truthiness without a KeyError.
-    grade_points = this_year_metrics.get("grade_timeline") or []
-    this_year_grades = sorted(
-        set(grade for point in grade_points for grade in point["counts"]),
+    # Both seasons' grade breakdowns, on one shared, normalized grade list --
+    # empty rather than missing when the live export has no grade column, so
+    # callers can test truthiness without a KeyError.
+    this_year_grade_points = _normalize_grade_points(
+        this_year_metrics.get("grade_timeline") or [])
+    last_year_grade_points = _normalize_grade_points(history.GRADE_TIMELINE)
+    grades = sorted(
+        set(grade for point in this_year_grade_points for grade in point["counts"])
+        | set(grade for point in last_year_grade_points for grade in point["counts"]),
         key=aggregate.grade_sort_key)
     this_year_grade_days = _zero_fill_by_grade(
-        grade_points, open_date, through, this_year_grades)
+        this_year_grade_points, open_date, through, grades)
+    last_year_grade_days = _grade_days_from_offsets(
+        last_year_grade_points, grades, last_year_max_day, last_year_days)
 
     return {
         "this_year_label": THIS_YEAR_LABEL,
@@ -129,6 +168,7 @@ def build_comparison(this_year_metrics, today_iso):
         "callout_count": after_cutoff,
         "callout_pct": round(100.0 * after_cutoff / history.TOTAL),
         "domain_days": max(this_year_days[-1]["day"], last_year_max_day),
-        "this_year_grades": this_year_grades,
+        "grades": grades,
         "this_year_grade_days": this_year_grade_days,
+        "last_year_grade_days": last_year_grade_days,
     }

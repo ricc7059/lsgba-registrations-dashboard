@@ -341,12 +341,20 @@ def _comparison_tab():
             "callout_count": 47,
             "callout_pct": 41,
             "domain_days": 2,
-            "this_year_grades": ["3rd Grade", "4th Grade"],
+            "grades": ["3rd", "4th"],
             "this_year_grade_days": [
                 {"day": 0, "label": "Aug 13",
-                 "counts": {"3rd Grade": 3, "4th Grade": 2}, "total": 5},
+                 "counts": {"3rd": 3, "4th": 2}, "total": 5},
                 {"day": 1, "label": "Aug 14",
-                 "counts": {"3rd Grade": 40, "4th Grade": 21}, "total": 61},
+                 "counts": {"3rd": 40, "4th": 21}, "total": 61},
+            ],
+            "last_year_grade_days": [
+                {"day": 0, "label": "Aug 11",
+                 "counts": {"3rd": 1, "4th": 3}, "total": 4},
+                {"day": 1, "label": "Aug 12",
+                 "counts": {"3rd": 20, "4th": 8}, "total": 28},
+                {"day": 2, "label": "Aug 13",
+                 "counts": {"3rd": 0, "4th": 0}, "total": 0},
             ],
         },
     }
@@ -356,38 +364,47 @@ class ComparisonPanelTests(unittest.TestCase):
     def setUp(self):
         self.html = render.render_dashboard([_comparison_tab()], "now", "2026-08-14")
 
-    def test_renders_three_svg_charts(self):
-        # Cumulative overlay, daily overlay, and the grade breakdown.
-        self.assertEqual(self.html.count("<svg"), 3)
+    def test_renders_four_svg_charts(self):
+        # Cumulative overlay, daily overlay, and one heatmap per season.
+        self.assertEqual(self.html.count("<svg"), 4)
 
-    def test_grade_breakdown_is_dropped_when_last_seasons_export_had_no_grade_column(self):
+    def test_grade_breakdown_is_dropped_when_neither_season_has_grade_data(self):
         tab = _comparison_tab()
-        tab["comparison"] = dict(tab["comparison"], this_year_grades=[],
-                                 this_year_grade_days=[])
+        tab["comparison"] = dict(tab["comparison"], grades=[],
+                                 this_year_grade_days=[], last_year_grade_days=[])
         html = render.render_dashboard([tab], "now", "2026-08-14")
         self.assertEqual(html.count("<svg"), 2)
         self.assertNotIn("by grade", html)
 
-    def test_renders_a_grade_legend_with_each_grade_in_sorted_order(self):
-        self.assertIn("3rd Grade", self.html)
-        self.assertIn("4th Grade", self.html)
-        third = self.html.index("3rd Grade")
-        fourth = self.html.index("4th Grade")
+    def test_renders_a_grade_row_for_each_grade_in_sorted_order(self):
+        self.assertIn("3rd", self.html)
+        self.assertIn("4th", self.html)
+        third = self.html.index("3rd")
+        fourth = self.html.index("4th")
         self.assertLess(third, fourth)
 
+    def test_heatmap_intensity_scale_note_is_present(self):
+        self.assertIn("Darker", self.html)
+        self.assertIn("share the same", self.html)
+        self.assertIn("scale", self.html)
+
     def test_every_chart_card_gets_its_own_legend(self):
-        # Cumulative, daily overlay, and the grade breakdown each carry a
-        # legend -- not just the cumulative chart at the top.
-        self.assertEqual(self.html.count('<div class="cmp-legend">'), 3)
+        # Cumulative and daily-overlay charts each carry a legend; the
+        # heatmap card uses its own per-panel labels instead.
+        self.assertEqual(self.html.count('<div class="cmp-legend">'), 2)
 
     def test_renders_a_legend_for_both_seasons(self):
         self.assertIn("cmp-legend", self.html)
         self.assertIn("2025-26", self.html)
         self.assertIn("2026-27", self.html)
 
-    def test_renders_the_after_cutoff_callout(self):
-        self.assertIn("47 of 116 registrations last season", self.html)
+    def test_renders_the_after_cutoff_callout_inside_the_chart(self):
+        # The callout is drawn as SVG text inside the highlighted band, not a
+        # separate note paragraph above the chart.
+        self.assertIn("47 registrations", self.html)
+        self.assertIn("after Aug 24", self.html)
         self.assertIn("41%", self.html)
+        self.assertNotIn('class="cmp-note">47', self.html)
         self.assertIn("Aug 24", self.html)
 
     def test_scoreboard_is_four_cells(self):
