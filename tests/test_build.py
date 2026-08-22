@@ -135,14 +135,14 @@ class MainExitCodeTests(unittest.TestCase):
             {"1126331": ("Travel Tryout", "travel-tryout", "tryout.csv", 4)}))
         self.assertEqual(code, 0)
         page = self.read_page()
-        self.assertIn("Season Comparison", page)
+        self.assertIn("Registration Comparison to Last Season", page)
 
     def test_a_registration_that_is_not_travel_tryout_gets_no_comparison_tab(self):
         code = self.run_main(state_for(
             {"1126197": ("Skills Course", "skills-course", "tryout.csv", 4)}))
         self.assertEqual(code, 0)
         page = self.read_page()
-        self.assertNotIn("Season Comparison", page)
+        self.assertNotIn("Registration Comparison to Last Season", page)
 
 
 class FindTravelTryoutTabTests(unittest.TestCase):

@@ -94,8 +94,8 @@ continue; carry the discrepancy into your report.
 Pages redeploys automatically on push, usually within a minute.
 
 Whenever a currently-Enabled registration's name contains "Travel Tryout",
-`build.py` also appends a second, composite **"Travel Tryout: Season
-Comparison"** tab overlaying that registration's live timeline against last
+`build.py` also appends a second, composite **"Registration Comparison to
+Last Season"** tab overlaying that registration's live timeline against last
 season's frozen 2025-26 numbers (`scripts/history.py`) — no extra step needed;
 it is derived fresh from the same export every time this build step runs. See
 "Season comparison tab" under Notes below.

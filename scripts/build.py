@@ -83,7 +83,7 @@ def build_comparison_tab(tabs, today):
     return {
         "id": "travel-tryout-comparison",
         "slug": "season-comparison",
-        "name": "Travel Tryout: Season Comparison",
+        "name": "Registration Comparison to Last Season",
         "kind": "comparison",
         "event": None,
         "priority": travel_tab.get("priority", 999),

@@ -311,7 +311,7 @@ class CrosstabRenderTests(unittest.TestCase):
 def _comparison_tab():
     return {
         "slug": "season-comparison",
-        "name": "Travel Tryout: Season Comparison",
+        "name": "Registration Comparison to Last Season",
         "kind": "comparison",
         "event": None,
         "priority": 0,
@@ -363,6 +363,15 @@ def _comparison_tab():
 class ComparisonPanelTests(unittest.TestCase):
     def setUp(self):
         self.html = render.render_dashboard([_comparison_tab()], "now", "2026-08-14")
+
+    def test_every_nonzero_bar_gets_a_count_label(self):
+        # Fixture: last season days 0,1 are nonzero (day 2 is 0), this season
+        # days 0,1 are both nonzero -- 4 labelled bars, not 5.
+        self.assertEqual(self.html.count('class="cmp-bar-label'), 4)
+
+    def test_a_zero_count_bar_gets_no_label(self):
+        # last_year_days day 2 is 0 -- present as a bar, not as a "0" label.
+        self.assertNotIn('cmp-bar-label-last" text-anchor="middle">0<', self.html)
 
     def test_renders_four_svg_charts(self):
         # Cumulative overlay, daily overlay, and one heatmap per season.

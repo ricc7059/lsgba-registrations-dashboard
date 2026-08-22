@@ -306,8 +306,11 @@ def _comparison_bar_svg(c):
     last_days, this_days = c["last_year_days"], c["this_year_days"]
     this_by_day = dict((p["day"], p) for p in this_days)
     n = len(last_days)
-    width, height = 860, 170
-    pad_x, pad_top, pad_bottom = 20, 16, 26
+    width, height = 860, 180
+    # Extra top padding (vs. the other charts' 16px) is deliberate: every bar
+    # gets a count label above it, and the tallest bar reaches pad_top itself
+    # -- without the headroom its label clips against the SVG's own viewBox.
+    pad_x, pad_top, pad_bottom = 20, 28, 26
     inner_w = width - pad_x * 2
     inner_h = height - pad_top - pad_bottom
     peak = max(max(p["new"] for p in last_days),
@@ -336,7 +339,6 @@ def _comparison_bar_svg(c):
            band_mid_x, pad_top + 20, c["callout_count"],
            band_mid_x, pad_top + 35, escape(c["callout_label"]), c["callout_pct"]))
 
-    peak_idx = max(range(n), key=lambda i: last_days[i]["new"])
     bars = []
     for i, p in enumerate(last_days):
         bar_h = inner_h * (p["new"] / float(peak))
@@ -346,6 +348,11 @@ def _comparison_bar_svg(c):
             '<title>%s season, %s: %d</title></rect>'
             % (cx_at(i) - bar_w - 1, by, bar_w, max(bar_h, 1.5), MAROON_BAR,
                c["last_year_label"], p["label"], p["new"]))
+        if p["new"]:
+            bars.append(
+                '<text x="%.1f" y="%.1f" class="cmp-bar-label cmp-bar-label-last" '
+                'text-anchor="middle">%d</text>'
+                % (cx_at(i) - bar_w / 2.0 - 1, by - 3, p["new"]))
 
         this_point = this_by_day.get(i)
         if this_point is None:
@@ -357,11 +364,11 @@ def _comparison_bar_svg(c):
             '<title>%s season, %s: %d</title></rect>'
             % (cx_at(i) + 1, this_y, bar_w, max(this_h, 1.5), GOLD,
                c["this_year_label"], this_point["label"], this_point["new"]))
-
-    peak_top = pad_top + inner_h - (inner_h * (last_days[peak_idx]["new"] / float(peak)))
-    peak_label = ('<text x="%.1f" y="%.1f" class="cmp-end-label" text-anchor="middle">'
-                 '%d</text>' % (cx_at(peak_idx) - bar_w / 2.0 - 1, peak_top - 8,
-                                 last_days[peak_idx]["new"]))
+        if this_point["new"]:
+            bars.append(
+                '<text x="%.1f" y="%.1f" class="cmp-bar-label cmp-bar-label-this" '
+                'text-anchor="middle">%d</text>'
+                % (cx_at(i) + bar_w / 2.0 + 1, this_y - 3, this_point["new"]))
 
     day_ticks = list(range(0, n, 5))
     if n - 1 not in day_ticks:
@@ -376,10 +383,10 @@ def _comparison_bar_svg(c):
         'aria-label="Daily registrations, this season vs last season, with the '
         'after-%s callout">'
         '<line x1="%d" y1="%.1f" x2="%d" y2="%.1f" stroke="%s" stroke-width="1"/>'
-        '%s%s%s%s</svg>'
+        '%s%s%s</svg>'
         % (width, height, c["callout_label"],
            pad_x, pad_top + inner_h, width - pad_x, pad_top + inner_h, EDGE,
-           band, "".join(bars), peak_label, labels))
+           band, "".join(bars), labels))
 
 
 def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season_label):
@@ -719,6 +726,10 @@ color:var(--dim)}
 .cmp-end-label{font-family:var(--mono);font-variant-numeric:tabular-nums;
 font-size:.8rem;font-weight:700;fill:var(--gold)}
 .cmp-hit{fill:transparent}
+.cmp-bar-label{font-family:var(--mono);font-variant-numeric:tabular-nums;
+font-size:8px;font-weight:700}
+.cmp-bar-label-last{fill:#D98CAA}
+.cmp-bar-label-this{fill:var(--gold)}
 .cmp-callout-title{font-family:var(--mono);font-variant-numeric:tabular-nums;
 font-size:15px;font-weight:800;fill:var(--gold)}
 .cmp-callout-sub{font-size:10.5px;fill:var(--dim)}
