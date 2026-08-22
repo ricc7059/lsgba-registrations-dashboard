@@ -96,3 +96,18 @@ GRADE_TIMELINE = [
     {"day": 29, "counts": {"5th": 1, "8th": 2}},
     {"day": 30, "counts": {"5th": 1, "7th": 1}},
 ]
+
+# Of the 47 after-cutoff registrants (day > CUTOFF_DAY, see above), how many
+# went on to make a travel team. One-time cross-reference: matched by
+# (first name, last name) -- and cross-checked on grade, since three players
+# had a birth-year/day typo in one of the two source files -- against the
+# 2025 team-acceptance roster (travel_team_acceptance_2025.csv). Like every
+# other export this project touches, that roster is never committed and this
+# is its aggregate-only result: no name, DOB, or row-level detail survives.
+# One accepted player had no name match in the registration export at all
+# (a data-entry spelling difference, most likely) and is excluded here, same
+# as anyone else this join can't place.
+MADE_TEAM_AFTER_CUTOFF = 41
+MADE_TEAM_AFTER_CUTOFF_BY_GRADE = {
+    "3rd": 10, "4th": 6, "5th": 8, "6th": 5, "7th": 8, "8th": 4,
+}

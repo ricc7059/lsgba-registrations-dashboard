@@ -159,12 +159,22 @@ comparison mean anything:
 1. **Cumulative registrations** — both seasons' running totals overlaid.
 2. **Daily registrations** — both seasons' new-per-day counts paired bar by
    bar, plus last season's after-cutoff window highlighted, with the callout
-   text ("N registrations after Aug 24 · X% of last season") drawn *inside*
-   that highlighted band rather than as a separate note above the chart —
-   the highlight and its explanation are one visual unit. That callout is
-   last season's numbers only, not re-evaluated against this season; anyone
-   moving the cutoff date changes `history.CUTOFF_DAY`/`CUTOFF_LABEL`, not
-   the render code.
+   text drawn *inside* that highlighted band rather than as a separate note
+   above the chart — the highlight and its explanation are one visual unit.
+   The callout has two parts, both last season's numbers only (neither is
+   re-evaluated against this season):
+   - "N registrations after Aug 24 · X% of last season" — from
+     `history.CUTOFF_DAY`/`CUTOFF_LABEL`, as before.
+   - "N made a travel team · X%" plus a by-grade breakdown — a one-time
+     cross-reference (by name, cross-checked on grade) of those after-cutoff
+     registrants against the 2025 team-acceptance roster, frozen as
+     `history.MADE_TEAM_AFTER_CUTOFF` / `MADE_TEAM_AFTER_CUTOFF_BY_GRADE`
+     (see that constant's comment for the exact method and its one known
+     gap: one accepted player had no name match in the registration export
+     and is excluded). Like everything else in `history.py`, this can't be
+     refreshed by this skill — it was computed once, by hand, from a private
+     roster file that is never committed, and it never needs to be
+     recomputed unless the underlying source files turn out to be wrong.
 3. **Daily registrations by grade** — a heatmap, one grid per season stacked
    vertically (not a stacked bar chart — that read poorly with this many
    grade categories). Rows are grade, columns are day-offset, and cell shade

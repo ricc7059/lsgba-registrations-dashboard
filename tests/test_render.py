@@ -340,6 +340,9 @@ def _comparison_tab():
             "callout_label": "Aug 24",
             "callout_count": 47,
             "callout_pct": 41,
+            "callout_made_team": 41,
+            "callout_made_team_pct": 87,
+            "callout_made_team_by_grade": [("3rd", 10), ("4th", 6)],
             "domain_days": 2,
             "grades": ["3rd", "4th"],
             "this_year_grade_days": [
@@ -415,6 +418,12 @@ class ComparisonPanelTests(unittest.TestCase):
         self.assertIn("41%", self.html)
         self.assertNotIn('class="cmp-note">47', self.html)
         self.assertIn("Aug 24", self.html)
+
+    def test_renders_the_made_team_callout_with_grade_breakdown(self):
+        self.assertIn("41 made a travel team", self.html)
+        self.assertIn("87%", self.html)
+        self.assertIn("3rd 10", self.html)
+        self.assertIn("4th 6", self.html)
 
     def test_scoreboard_is_four_cells(self):
         self.assertEqual(self.html.count('class="board-cell"'), 4)

@@ -326,6 +326,9 @@ def _comparison_bar_svg(c):
     band_x0 = pad_x + slot * (cutoff + 1)
     band_x1 = pad_x + inner_w
     band_mid_x = (band_x0 + band_x1) / 2.0
+    grade_breakdown = " &middot; ".join(
+        "%s %d" % (escape(grade), count)
+        for grade, count in c["callout_made_team_by_grade"])
     band = (
         '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" opacity="0.10"/>'
         '<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="1" '
@@ -334,10 +337,16 @@ def _comparison_bar_svg(c):
         '%d registrations</text>'
         '<text x="%.1f" y="%.1f" class="cmp-callout-sub" text-anchor="middle">'
         'after %s &middot; %d%% of last season</text>'
+        '<text x="%.1f" y="%.1f" class="cmp-callout-title2" text-anchor="middle">'
+        '%d made a travel team &middot; %d%%</text>'
+        '<text x="%.1f" y="%.1f" class="cmp-callout-sub" text-anchor="middle">'
+        '%s</text>'
         % (band_x0, pad_top, band_x1 - band_x0, inner_h, GOLD,
            band_x0, pad_top, band_x0, pad_top + inner_h, GOLD_DIM,
            band_mid_x, pad_top + 20, c["callout_count"],
-           band_mid_x, pad_top + 35, escape(c["callout_label"]), c["callout_pct"]))
+           band_mid_x, pad_top + 35, escape(c["callout_label"]), c["callout_pct"],
+           band_mid_x, pad_top + 54, c["callout_made_team"], c["callout_made_team_pct"],
+           band_mid_x, pad_top + 70, grade_breakdown))
 
     bars = []
     for i, p in enumerate(last_days):
@@ -733,6 +742,8 @@ font-size:8px;font-weight:700}
 .cmp-callout-title{font-family:var(--mono);font-variant-numeric:tabular-nums;
 font-size:15px;font-weight:800;fill:var(--gold)}
 .cmp-callout-sub{font-size:10.5px;fill:var(--dim)}
+.cmp-callout-title2{font-family:var(--mono);font-variant-numeric:tabular-nums;
+font-size:13px;font-weight:800;fill:#E8D8B8}
 .cmp-heatmap-label{display:flex;align-items:center;gap:8px;margin:14px 0 4px;
 font-size:.78rem;color:var(--dim)}
 .cmp-heatmap-label:first-of-type{margin-top:0}

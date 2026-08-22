@@ -62,5 +62,22 @@ class GradeTimelineIntegrityTests(unittest.TestCase):
                 self.assertNotRegex(grade, r"(?i)grade")
 
 
+class MadeTeamAfterCutoffIntegrityTests(unittest.TestCase):
+    def test_by_grade_breakdown_sums_to_the_total(self):
+        self.assertEqual(sum(history.MADE_TEAM_AFTER_CUTOFF_BY_GRADE.values()),
+                         history.MADE_TEAM_AFTER_CUTOFF)
+
+    def test_cannot_exceed_the_total_after_cutoff_registrations(self):
+        # Every made-team player counted here must also be one of the
+        # after-cutoff registrants CUTOFF_DAY already defines.
+        after_cutoff_total = sum(point["new"] for point in history.TIMELINE
+                                 if point["day"] > history.CUTOFF_DAY)
+        self.assertLessEqual(history.MADE_TEAM_AFTER_CUTOFF, after_cutoff_total)
+
+    def test_grade_labels_are_short_form(self):
+        for grade in history.MADE_TEAM_AFTER_CUTOFF_BY_GRADE:
+            self.assertNotRegex(grade, r"(?i)grade")
+
+
 if __name__ == "__main__":
     unittest.main()

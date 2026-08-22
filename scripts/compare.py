@@ -167,6 +167,12 @@ def build_comparison(this_year_metrics, today_iso):
         "callout_label": history.CUTOFF_LABEL,
         "callout_count": after_cutoff,
         "callout_pct": round(100.0 * after_cutoff / history.TOTAL),
+        "callout_made_team": history.MADE_TEAM_AFTER_CUTOFF,
+        "callout_made_team_pct": (round(100.0 * history.MADE_TEAM_AFTER_CUTOFF / after_cutoff)
+                                  if after_cutoff else 0),
+        "callout_made_team_by_grade": sorted(
+            history.MADE_TEAM_AFTER_CUTOFF_BY_GRADE.items(),
+            key=lambda pair: aggregate.grade_sort_key(pair[0])),
         "domain_days": max(this_year_days[-1]["day"], last_year_max_day),
         "grades": grades,
         "this_year_grade_days": this_year_grade_days,
