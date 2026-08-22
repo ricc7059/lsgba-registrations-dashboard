@@ -233,6 +233,38 @@ def _pace_note(delta):
     return "even with last season's pace"
 
 
+def _vertical_axis_labels(ticks):
+    """(x, label) pairs -> one label per day, rotated -90deg so all of them
+    fit -- every-5th-day tick spacing reads fine horizontal, but one label
+    per day only fits standing up."""
+    return "".join(
+        '<text x="%.1f" y="%.1f" class="axis" text-anchor="end" '
+        'transform="rotate(-90 %.1f %.1f)">%s</text>'
+        % (x, y, x, y, escape(label))
+        for x, y, label in ticks)
+
+
+def _relative_luminance(r, g, b):
+    def lin(v):
+        v = v / 255.0
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+
+
+def _cell_text_colour(colour_hex, opacity, bg_hex=SURFACE):
+    """White or ink, picked by the *blended* colour a viewer actually sees --
+    a low-opacity cell reads close to the dark surface (wants light text);
+    a fully-opaque gold cell is itself light (wants dark text). Computed,
+    not eyeballed, same reasoning as everywhere else text sits on a fill."""
+    c, b = colour_hex.lstrip("#"), bg_hex.lstrip("#")
+    cr, cg, cb = (int(c[i:i + 2], 16) for i in (0, 2, 4))
+    br, bg_g, bb = (int(b[i:i + 2], 16) for i in (0, 2, 4))
+    r = cr * opacity + br * (1 - opacity)
+    g = cg * opacity + bg_g * (1 - opacity)
+    bch = cb * opacity + bb * (1 - opacity)
+    return GROUND if _relative_luminance(r, g, bch) > 0.3 else TEXT
+
+
 def _comparison_line_svg(c):
     """Both seasons' cumulative curve, aligned by day of registration window.
 
@@ -242,8 +274,10 @@ def _comparison_line_svg(c):
     """
     last_days, this_days = c["last_year_days"], c["this_year_days"]
     domain = c["domain_days"] or 1
-    width, height = 860, 210
-    pad_x, pad_top, pad_bottom = 20, 16, 26
+    width, height = 860, 220
+    # pad_bottom is taller than the other charts' single-line axis (26px):
+    # every day gets its own rotated label now, not just every 5th.
+    pad_x, pad_top, pad_bottom = 20, 16, 46
     inner_w = width - pad_x * 2
     inner_h = height - pad_top - pad_bottom
     peak = max(c["last_year_total"], c["this_year_total"]) or 1
@@ -280,13 +314,8 @@ def _comparison_line_svg(c):
                 % (x_at(this_end["day"]) - 8, y_at(this_end["cumulative"]) - 10,
                    this_end["cumulative"]))
 
-    day_ticks = list(range(0, domain + 1, 5))
-    if domain not in day_ticks:
-        day_ticks.append(domain)
-    labels = "".join(
-        '<text x="%.1f" y="%d" class="axis" text-anchor="middle">Day %d</text>'
-        % (x_at(d), height - 8, d)
-        for d in day_ticks)
+    labels = _vertical_axis_labels(
+        (x_at(d), pad_top + inner_h + 9, "Day %d" % d) for d in range(domain + 1))
 
     return (
         '<svg viewBox="0 0 %d %d" class="timeline cmp-timeline" role="img" '
@@ -353,11 +382,13 @@ def _comparison_bar_svg(c):
     last_days, this_days = c["last_year_days"], c["this_year_days"]
     this_by_day = dict((p["day"], p) for p in this_days)
     n = len(last_days)
-    width, height = 860, 180
+    width, height = 860, 200
     # Extra top padding (vs. the other charts' 16px) is deliberate: every bar
     # gets a count label above it, and the tallest bar reaches pad_top itself
     # -- without the headroom its label clips against the SVG's own viewBox.
-    pad_x, pad_top, pad_bottom = 20, 28, 26
+    # pad_bottom is taller than a single-line axis needs: every day gets its
+    # own rotated label now, not just every 5th.
+    pad_x, pad_top, pad_bottom = 20, 28, 46
     inner_w = width - pad_x * 2
     inner_h = height - pad_top - pad_bottom
     peak = max(max(p["new"] for p in last_days),
@@ -427,13 +458,8 @@ def _comparison_bar_svg(c):
                 'text-anchor="middle">%d</text>'
                 % (cx_at(i) + bar_w / 2.0 + 1, this_y - 3, this_point["new"]))
 
-    day_ticks = list(range(0, n, 5))
-    if n - 1 not in day_ticks:
-        day_ticks.append(n - 1)
-    labels = "".join(
-        '<text x="%.1f" y="%d" class="axis" text-anchor="middle">%s</text>'
-        % (cx_at(d), height - 8, last_days[d]["label"])
-        for d in day_ticks)
+    labels = _vertical_axis_labels(
+        (cx_at(d), pad_top + inner_h + 9, last_days[d]["label"]) for d in range(n))
 
     return (
         '<svg viewBox="0 0 %d %d" class="timeline cmp-timeline" role="img" '
@@ -450,7 +476,11 @@ def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season
     """One season's day-by-grade grid. Colour is fixed (the season's own
     identity hue, matching the other two charts); fill-opacity carries the
     count, on a scale the caller shares across both seasons' grids so
-    "darker" means the same thing in both.
+    "darker" means the same thing in both. Every cell with a nonzero count
+    is also directly labelled -- text colour picked per cell so it clears
+    contrast against that cell's own blended shade (see _cell_text_colour) --
+    and each row ends in that grade's running total for the season, past a
+    hairline divider.
 
     `days` only needs to cover the days that season actually has -- a day
     beyond it (this season, before it happens) draws no cell at all rather
@@ -458,7 +488,10 @@ def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season
     """
     n_cols = domain_days + 1
     width = 860
-    pad_left, pad_top, pad_right, pad_bottom = 46, 6, 14, 22
+    # pad_top makes room for the "Total" column header; pad_right for the
+    # totals themselves; pad_bottom for one rotated label per day (every
+    # day gets one now, not just every 5th).
+    pad_left, pad_top, pad_right, pad_bottom = 46, 16, 40, 42
     row_h, row_gap = 20, 2
     rows = len(grades)
     height = pad_top + rows * (row_h + row_gap) - row_gap + pad_bottom
@@ -472,14 +505,27 @@ def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season
     def cy(row_i):
         return pad_top + row_i * (row_h + row_gap)
 
+    grid_right = pad_left + n_cols * slot
+    total_x = width - 6
+    divider_x = grid_right + 8
+
     cells = [
         '<text x="%.1f" y="%.1f" class="axis" text-anchor="end">%s</text>'
         % (pad_left - 8, cy(row_i) + row_h / 2.0 + 3, escape(grade))
         for row_i, grade in enumerate(grades)
     ]
+    cells.append(
+        '<text x="%.1f" y="%.1f" class="cmp-heat-total-head" text-anchor="end">'
+        'Total</text>' % (total_x, pad_top - 5))
+    cells.append(
+        '<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="1"/>'
+        % (divider_x, pad_top - 2, divider_x, cy(rows - 1) + row_h + 2, EDGE))
+
+    row_totals = dict((grade, 0) for grade in grades)
     for p in days:
         for row_i, grade in enumerate(grades):
             count = p["counts"].get(grade, 0)
+            row_totals[grade] += count
             opacity = 0.0 if not count else max(0.16, min(1.0, count / float(max_count)))
             cells.append(
                 '<rect x="%.1f" y="%.1f" width="%.1f" height="%d" rx="2" '
@@ -487,18 +533,26 @@ def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season
                 '<title>%s, %s: %d</title></rect>'
                 % (cx(p["day"]), cy(row_i), cell_w, row_h, colour, opacity,
                    EDGE, escape(grade), p["label"], count))
+            if count:
+                cells.append(
+                    '<text x="%.1f" y="%.1f" class="cmp-heat-n" text-anchor="middle" '
+                    'fill="%s">%d</text>'
+                    % (cx(p["day"]) + cell_w / 2.0, cy(row_i) + row_h / 2.0 + 3,
+                       _cell_text_colour(colour, opacity), count))
 
-    day_ticks = list(range(0, n_cols, 5))
-    if n_cols - 1 not in day_ticks:
-        day_ticks.append(n_cols - 1)
-    labels = "".join(
-        '<text x="%.1f" y="%d" class="axis" text-anchor="middle">%s</text>'
-        % (cx(d) + cell_w / 2.0, height - 6, days[d]["label"])
-        for d in day_ticks if d < len(days))
+    for row_i, grade in enumerate(grades):
+        cells.append(
+            '<text x="%.1f" y="%.1f" class="cmp-heat-total" text-anchor="end">'
+            '%d</text>' % (total_x, cy(row_i) + row_h / 2.0 + 3, row_totals[grade]))
+
+    labels = _vertical_axis_labels(
+        (cx(d) + cell_w / 2.0, height - pad_bottom + 8, days[d]["label"])
+        for d in range(n_cols) if d < len(days))
 
     return (
         '<svg viewBox="0 0 %d %d" class="timeline cmp-heatmap" role="img" '
-        'aria-label="%s registrations by day and grade">%s%s</svg>'
+        'aria-label="%s registrations by day and grade, with per-grade totals">'
+        '%s%s</svg>'
         % (width, height, escape(season_label), "".join(cells), labels))
 
 
@@ -799,6 +853,12 @@ font-size:7px;font-weight:700;fill:var(--gold)}
 font-size:.78rem;color:var(--dim)}
 .cmp-heatmap-label:first-of-type{margin-top:0}
 .cmp-heatmap .axis{font-size:9.5px}
+.cmp-heat-n{font-family:var(--mono);font-variant-numeric:tabular-nums;
+font-size:8px;font-weight:700}
+.cmp-heat-total{font-family:var(--mono);font-variant-numeric:tabular-nums;
+font-size:9.5px;font-weight:800;fill:var(--gold)}
+.cmp-heat-total-head{font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;
+fill:var(--dim)}
 
 @media(max-width:860px){
 .shell{flex-direction:column}

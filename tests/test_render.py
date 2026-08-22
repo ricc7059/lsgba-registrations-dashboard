@@ -49,6 +49,22 @@ class DaysUntilTests(unittest.TestCase):
         self.assertIsNone(render.days_until(None, "2026-08-15"))
 
 
+class CellTextColourTests(unittest.TestCase):
+    def test_light_text_on_a_barely_opaque_cell(self):
+        # A count-1 cell (opacity floor 0.16) reads close to the dark
+        # surface -- needs light text, on either heatmap's colour.
+        self.assertEqual(render._cell_text_colour(render.GOLD, 0.16), render.TEXT)
+        self.assertEqual(render._cell_text_colour(render.MAROON_BAR, 0.16), render.TEXT)
+
+    def test_dark_text_on_a_fully_opaque_gold_cell(self):
+        # Full-opacity gold is itself light -- white text would fail contrast.
+        self.assertEqual(render._cell_text_colour(render.GOLD, 1.0), render.GROUND)
+
+    def test_light_text_on_a_fully_opaque_maroon_cell(self):
+        # Full-opacity maroon stays dark enough that light text still works.
+        self.assertEqual(render._cell_text_colour(render.MAROON_BAR, 1.0), render.TEXT)
+
+
 class SlugTests(unittest.TestCase):
     def test_colliding_slugs_are_made_unique(self):
         tabs = [{"slug": "tryout"}, {"slug": "tryout"}, {"slug": "tryout"}]
@@ -404,6 +420,33 @@ class ComparisonPanelTests(unittest.TestCase):
         self.assertIn("Darker", self.html)
         self.assertIn("share the same", self.html)
         self.assertIn("scale", self.html)
+
+    def test_heatmap_cells_carry_their_own_count(self):
+        self.assertEqual(self.html.count('class="cmp-heat-n"'), 8)  # every nonzero cell
+
+    def test_zero_heatmap_cells_carry_no_count_label(self):
+        # last_year_grade_days day 2 is {"3rd": 0, "4th": 0} -- present as
+        # cells, not as "0" labels.
+        self.assertNotIn('class="cmp-heat-n" text-anchor="middle" fill="%s">0<' %
+                         render.GROUND, self.html)
+        self.assertNotIn('class="cmp-heat-n" text-anchor="middle" fill="%s">0<' %
+                         render.TEXT, self.html)
+
+    def test_heatmap_shows_a_per_grade_total_column(self):
+        self.assertIn('class="cmp-heat-total-head" text-anchor="end">Total<', self.html)
+        # this_year: 3rd = 3+40 = 43, 4th = 2+21 = 23.
+        self.assertIn('class="cmp-heat-total" text-anchor="end">43<', self.html)
+        self.assertIn('class="cmp-heat-total" text-anchor="end">23<', self.html)
+        # last_year: 3rd = 1+20+0 = 21, 4th = 3+8+0 = 11.
+        self.assertIn('class="cmp-heat-total" text-anchor="end">21<', self.html)
+        self.assertIn('class="cmp-heat-total" text-anchor="end">11<', self.html)
+
+    def test_every_day_gets_its_own_rotated_axis_label(self):
+        # 4 charts on the tab (cumulative, daily, 2 heatmaps), all switched to
+        # one label per day -- every one uses the rotate(-90 ...) transform.
+        self.assertGreater(self.html.count("rotate(-90 "), 4)
+        self.assertIn("Aug 13", self.html)
+        self.assertIn("Aug 14", self.html)
 
     def test_every_chart_card_gets_its_own_legend(self):
         # Cumulative and daily-overlay charts each carry a legend; the

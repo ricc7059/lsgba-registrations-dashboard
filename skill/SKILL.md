@@ -209,6 +209,29 @@ comparison mean anything:
    grid only draws cells through today — a day that hasn't happened yet stays
    blank rather than reading as a false zero.
 
+   Every nonzero cell is directly labelled with its count (see
+   `_comparison_heatmap_svg`); text colour is picked per cell, not fixed, by
+   `_cell_text_colour` — it blends the cell's own colour with the card
+   surface at that cell's actual opacity and computes the blended shade's
+   relative luminance, so a barely-shaded cell (near the dark surface) gets
+   light text and a fully-saturated gold cell (itself light) gets dark ink,
+   both calculated rather than assumed. Each row also ends in a **Total**
+   column past a hairline divider — that grade's sum across every day shown,
+   not just the visible range, so it stays right even though the two grids
+   don't span the same number of columns (last season's is the full 31-day
+   window; this season's stops at today).
+
+All four charts on this tab (the three above, plus the by-grade heatmap
+rows' day axis) label **every day**, not every 5th — with 31 possible days
+that only fits by rotating each label -90° (see `_vertical_axis_labels`).
+The rotation anchor matters: it must sit just past the plot's own baseline
+(axis line, or the heatmap grid's bottom edge) with the label extending
+*away* from the plot into the padding reserved for it — anchoring near the
+SVG's outer edge instead leaves most of the label with nowhere to render
+and it clips silently (this happened once: only each label's last character
+survived, e.g. "Day 12" showing as "2"). If a label ever looks truncated
+again, check the anchor's distance from the SVG's own bottom edge first.
+
 Both seasons' exports spell grade differently ("3rd Grade" this season, "3rd"
 last season, per each export's own grade question) — `compare.py` normalizes
 both to the short form before matching a row across seasons, so this doesn't
