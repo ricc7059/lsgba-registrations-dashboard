@@ -221,6 +221,195 @@ def _board_cell(label, value, suffix, attrs=""):
             '</div>' % (attrs, escape(label), escape(value), escape(suffix)))
 
 
+def _signed(number):
+    return "+%d" % number if number > 0 else "%d" % number
+
+
+def _pace_note(delta):
+    if delta > 0:
+        return "ahead of last season's pace"
+    if delta < 0:
+        return "behind last season's pace"
+    return "even with last season's pace"
+
+
+def _comparison_line_svg(c):
+    """Both seasons' cumulative curve, aligned by day of registration window.
+
+    Day-offset on the x axis rather than a calendar date: the two seasons
+    opened two days apart, and only the day-of-window comparison makes them
+    readable on one scale. See compare.py for why no ISO date reaches here.
+    """
+    last_days, this_days = c["last_year_days"], c["this_year_days"]
+    domain = c["domain_days"] or 1
+    width, height = 860, 210
+    pad_x, pad_top, pad_bottom = 20, 16, 26
+    inner_w = width - pad_x * 2
+    inner_h = height - pad_top - pad_bottom
+    peak = max(c["last_year_total"], c["this_year_total"]) or 1
+
+    def x_at(day):
+        return pad_x + inner_w * (day / float(domain))
+
+    def y_at(value):
+        return pad_top + inner_h - inner_h * (value / float(peak))
+
+    def polyline(days, colour, stroke_width):
+        points = " ".join("%.1f,%.1f" % (x_at(p["day"]), y_at(p["cumulative"]))
+                          for p in days)
+        return ('<polyline points="%s" fill="none" stroke="%s" stroke-width="%s" '
+                'stroke-linejoin="round" stroke-linecap="round"/>'
+                % (points, colour, stroke_width))
+
+    def hits(days, series_label):
+        return "".join(
+            '<circle class="cmp-hit" cx="%.1f" cy="%.1f" r="8">'
+            '<title>%s, day %d (%s): %d total, +%d that day</title></circle>'
+            % (x_at(p["day"]), y_at(p["cumulative"]), series_label,
+               p["day"], p["label"], p["cumulative"], p["new"])
+            for p in days)
+
+    last_end, this_end = last_days[-1], this_days[-1]
+    dots = (
+        '<circle cx="%.1f" cy="%.1f" r="3.5" fill="%s"/>'
+        % (x_at(last_end["day"]), y_at(last_end["cumulative"]), MAROON_BAR)
+        + '<circle cx="%.1f" cy="%.1f" r="4.5" fill="%s"/>'
+        % (x_at(this_end["day"]), y_at(this_end["cumulative"]), GOLD))
+    end_label = ('<text x="%.1f" y="%.1f" class="cmp-end-label" text-anchor="end">'
+                '%d</text>'
+                % (x_at(this_end["day"]) - 8, y_at(this_end["cumulative"]) - 10,
+                   this_end["cumulative"]))
+
+    day_ticks = list(range(0, domain + 1, 5))
+    if domain not in day_ticks:
+        day_ticks.append(domain)
+    labels = "".join(
+        '<text x="%.1f" y="%d" class="axis" text-anchor="middle">Day %d</text>'
+        % (x_at(d), height - 8, d)
+        for d in day_ticks)
+
+    return (
+        '<svg viewBox="0 0 %d %d" class="timeline cmp-timeline" role="img" '
+        'aria-label="Cumulative registrations, this season vs last season">'
+        '<line x1="%d" y1="%.1f" x2="%d" y2="%.1f" stroke="%s" stroke-width="1"/>'
+        '%s%s%s%s%s%s</svg>'
+        % (width, height,
+           pad_x, pad_top + inner_h, width - pad_x, pad_top + inner_h, EDGE,
+           polyline(last_days, MAROON_BAR, "2"), polyline(this_days, GOLD, "3"),
+           dots, end_label, labels,
+           hits(last_days, c["last_year_label"]) + hits(this_days, c["this_year_label"])))
+
+
+def _comparison_bar_svg(c):
+    """Last season's daily count, with the after-cutoff window highlighted."""
+    days = c["last_year_days"]
+    n = len(days)
+    width, height = 860, 170
+    pad_x, pad_top, pad_bottom = 20, 16, 26
+    inner_w = width - pad_x * 2
+    inner_h = height - pad_top - pad_bottom
+    peak = max(p["new"] for p in days) or 1
+    slot = inner_w / float(n)
+    bar_w = max(4.0, min(16.0, slot * 0.55))
+    cutoff = c["callout_day"]
+
+    def cx_at(i):
+        return pad_x + slot * i + slot / 2.0
+
+    band_x0 = pad_x + slot * (cutoff + 1)
+    band_x1 = pad_x + inner_w
+    band = (
+        '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" opacity="0.10"/>'
+        '<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="1" '
+        'stroke-dasharray="3 3"/>'
+        % (band_x0, pad_top, band_x1 - band_x0, inner_h, GOLD,
+           band_x0, pad_top, band_x0, pad_top + inner_h, GOLD_DIM))
+
+    peak_idx = max(range(n), key=lambda i: days[i]["new"])
+    bars = []
+    for i, p in enumerate(days):
+        bar_h = inner_h * (p["new"] / float(peak))
+        by = pad_top + inner_h - bar_h
+        fill = GOLD if i == peak_idx else MAROON_BAR
+        bars.append(
+            '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="2.5" fill="%s">'
+            '<title>%s: %d</title></rect>'
+            % (cx_at(i) - bar_w / 2.0, by, bar_w, max(bar_h, 1.5), fill,
+               p["label"], p["new"]))
+    peak_top = pad_top + inner_h - (inner_h * (days[peak_idx]["new"] / float(peak)))
+    peak_label = ('<text x="%.1f" y="%.1f" class="cmp-end-label" text-anchor="middle">'
+                 '%d</text>' % (cx_at(peak_idx), peak_top - 8, days[peak_idx]["new"]))
+
+    day_ticks = list(range(0, n, 5))
+    if n - 1 not in day_ticks:
+        day_ticks.append(n - 1)
+    labels = "".join(
+        '<text x="%.1f" y="%d" class="axis" text-anchor="middle">%s</text>'
+        % (cx_at(d), height - 8, days[d]["label"])
+        for d in day_ticks)
+
+    return (
+        '<svg viewBox="0 0 %d %d" class="timeline cmp-timeline" role="img" '
+        'aria-label="Daily registrations last season, with the after-%s callout">'
+        '<line x1="%d" y1="%.1f" x2="%d" y2="%.1f" stroke="%s" stroke-width="1"/>'
+        '%s%s%s%s</svg>'
+        % (width, height, c["callout_label"],
+           pad_x, pad_top + inner_h, width - pad_x, pad_top + inner_h, EDGE,
+           band, "".join(bars), peak_label, labels))
+
+
+def _comparison_panel(tab, slug, is_first):
+    c = tab["comparison"]
+
+    board = "".join([
+        _board_cell("This season", "%d" % c["this_year_total"], "as of today"),
+        _board_cell("Last season, day %d" % c["this_year_today_day"],
+                    "%d" % c["last_year_at_same_day"], "same point last season"),
+        _board_cell("Pace vs last season", _signed(c["pace_delta"]),
+                    _pace_note(c["pace_delta"])),
+        _board_cell("Last season, final", "%d" % c["last_year_total"],
+                    "%s–%s, %s" % (c["last_year_open_label"],
+                                        c["last_year_close_label"], c["last_year_label"])),
+    ])
+
+    legend = (
+        '<div class="cmp-legend">'
+        '<span class="cmp-legend-item"><span class="cmp-legend-key cmp-last"></span>'
+        '%s season &middot; final %d</span>'
+        '<span class="cmp-legend-item"><span class="cmp-legend-key cmp-this"></span>'
+        '%s season &middot; %d to date</span>'
+        '</div>'
+        % (escape(c["last_year_label"]), c["last_year_total"],
+           escape(c["this_year_label"]), c["this_year_total"]))
+
+    callout_note = (
+        '<p class="cmp-note">%d of %d registrations last season (%d%%) came in '
+        'after %s.</p>'
+        % (c["callout_count"], c["last_year_total"], c["callout_pct"],
+           escape(c["callout_label"])))
+
+    return (
+        '<section class="tab-panel%s" id="panel-%s" role="tabpanel" aria-label="%s">'
+        '  <header class="panel-head">'
+        '    <h2>%s</h2>'
+        '    <p class="dates">Day 0 = registration opens &middot; %s last season, '
+        '%s this season</p>'
+        '  </header>'
+        '  <div class="board">%s</div>'
+        '  <section class="card wide"><h3>Cumulative registrations '
+        '<span class="sub">both seasons, aligned by day of registration window</span>'
+        '</h3>%s%s</section>'
+        '  <section class="card wide"><h3>Daily registrations '
+        '<span class="sub">%s season</span></h3>%s%s</section>'
+        '</section>'
+        % (" is-active" if is_first else "", escape(slug), escape(tab["name"]),
+           escape(tab["name"]),
+           escape(c["last_year_open_label"]), escape(c["this_year_open_label"]),
+           board,
+           legend, _comparison_line_svg(c),
+           escape(c["last_year_label"]), callout_note, _comparison_bar_svg(c)))
+
+
 def _countdown_attrs(event):
     """Carry the event date as three numbers, for the browser to recompute from.
 
@@ -242,6 +431,8 @@ def _today_count(metrics, today):
 
 
 def _panel(tab, slug, today, is_first):
+    if tab.get("kind") == "comparison":
+        return _comparison_panel(tab, slug, is_first)
     metrics = tab["metrics"]
     event = tab.get("event") or {}
     countdown_value, countdown_suffix = _countdown_reading(event, today)
@@ -411,6 +602,20 @@ background:linear-gradient(90deg,var(--gold-dim),var(--gold))}
 .bar-value{font-size:.86rem;font-weight:700;text-align:right;color:var(--gold)}
 .empty{color:var(--dim);font-size:.83rem;margin:0}
 .footer{margin-top:26px;font-size:.72rem;color:var(--dim)}
+
+/* ---- season comparison ---- */
+.cmp-legend{display:flex;flex-wrap:wrap;gap:16px 22px;margin:0 0 12px}
+.cmp-legend-item{display:flex;align-items:center;gap:7px;font-size:.78rem;
+color:var(--dim)}
+.cmp-legend-key{width:14px;height:2px;border-radius:1px;flex:0 0 14px}
+.cmp-legend-key.cmp-last{background:#A82A55}
+.cmp-legend-key.cmp-this{background:var(--gold)}
+.cmp-note{margin:0 0 10px;font-size:.8rem;color:var(--dim)}
+.timeline{width:100%%;height:auto;display:block}
+.timeline .axis{font-size:9px;fill:var(--dim);font-family:var(--sans)}
+.cmp-end-label{font-family:var(--mono);font-variant-numeric:tabular-nums;
+font-size:.8rem;font-weight:700;fill:var(--gold)}
+.cmp-hit{fill:transparent}
 
 @media(max-width:860px){
 .shell{flex-direction:column}

@@ -93,6 +93,13 @@ continue; carry the discrepancy into your report.
 
 Pages redeploys automatically on push, usually within a minute.
 
+Whenever a currently-Enabled registration's name contains "Travel Tryout",
+`build.py` also appends a second, composite **"Travel Tryout: Season
+Comparison"** tab overlaying that registration's live timeline against last
+season's frozen 2025-26 numbers (`scripts/history.py`) — no extra step needed;
+it is derived fresh from the same export every time this build step runs. See
+"Season comparison tab" under Notes below.
+
 ## 6. Report back
 
 Tell the user, per registration: the new total, the delta, and whether the
@@ -120,3 +127,32 @@ A warning nobody reads is the same as no warning. Finish with the dashboard URL.
   only skips the commit-and-push step and says so. The regenerated page is left
   in the working tree, so a later `git add -A` will sweep it up. It is a
   "stop before publishing" switch, not a "change nothing on disk" switch.
+
+## Season comparison tab
+
+`build.py` matches the live registration by name (`"travel tryout"`,
+case-insensitive) rather than by survey id, because SportsEngine mints a new
+id for this registration every season — no state.json edit is needed when
+next year's id shows up. Whichever tab it matches becomes "this season"; its
+metrics already come from the export you just parsed in step 5, so the
+comparison tab always reflects the count you just recorded, with no separate
+export or record step of its own. If no Enabled registration's name contains
+"Travel Tryout", or that registration has zero signups so far, the comparison
+tab is simply omitted — this is normal outside the tryout registration window,
+not an error.
+
+Last season (2025-26: Aug 11 - Sep 10, 2025, 116 total) is frozen in
+`scripts/history.py` as day-offset counts only — no names, no export file, no
+raw CSV. That export is gone and the season will not reopen, so this data
+never changes; it does not need to be, and cannot be, refreshed by this skill.
+If a future season's dashboard should compare against *this* season once it
+closes, freeze this season's numbers into `scripts/history.py` the same way
+(see that file's header) and update `THIS_YEAR_LABEL` in `scripts/compare.py`.
+
+The two charts on that tab overlay the seasons by **day of registration
+window** (day 0 = the day registration opened), not by calendar date — the
+two seasons open a couple of days apart, so a shared day-offset axis is what
+makes the pace comparison mean anything. The daily chart's shaded band and the
+"N registrations came in after Aug 24" callout are last season's numbers
+only, not a per-season comparison; anyone updating the cutoff date should
+change `history.CUTOFF_DAY`/`CUTOFF_LABEL`, not the render code.

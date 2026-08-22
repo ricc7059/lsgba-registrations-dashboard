@@ -308,5 +308,84 @@ class CrosstabRenderTests(unittest.TestCase):
         piiscan.assert_clean(html)
 
 
+def _comparison_tab():
+    return {
+        "slug": "season-comparison",
+        "name": "Travel Tryout: Season Comparison",
+        "kind": "comparison",
+        "event": None,
+        "priority": 0,
+        "metrics": {"total": 66},
+        "comparison": {
+            "this_year_label": "2026-27",
+            "this_year_open_label": "Aug 13",
+            "this_year_days": [
+                {"day": 0, "label": "Aug 13", "new": 5, "cumulative": 5},
+                {"day": 1, "label": "Aug 14", "new": 61, "cumulative": 66},
+            ],
+            "this_year_today_day": 1,
+            "this_year_total": 66,
+            "last_year_label": "2025-26",
+            "last_year_open_label": "Aug 11",
+            "last_year_close_label": "Sep 10",
+            "last_year_days": [
+                {"day": 0, "label": "Aug 11", "new": 4, "cumulative": 4},
+                {"day": 1, "label": "Aug 12", "new": 28, "cumulative": 32},
+                {"day": 2, "label": "Aug 13", "new": 0, "cumulative": 32},
+            ],
+            "last_year_total": 116,
+            "last_year_at_same_day": 32,
+            "pace_delta": 34,
+            "callout_day": 1,
+            "callout_label": "Aug 24",
+            "callout_count": 47,
+            "callout_pct": 41,
+            "domain_days": 2,
+        },
+    }
+
+
+class ComparisonPanelTests(unittest.TestCase):
+    def setUp(self):
+        self.html = render.render_dashboard([_comparison_tab()], "now", "2026-08-14")
+
+    def test_renders_two_svg_charts(self):
+        self.assertEqual(self.html.count("<svg"), 2)
+
+    def test_renders_a_legend_for_both_seasons(self):
+        self.assertIn("cmp-legend", self.html)
+        self.assertIn("2025-26", self.html)
+        self.assertIn("2026-27", self.html)
+
+    def test_renders_the_after_cutoff_callout(self):
+        self.assertIn("47 of 116 registrations last season", self.html)
+        self.assertIn("41%", self.html)
+        self.assertIn("Aug 24", self.html)
+
+    def test_scoreboard_is_four_cells(self):
+        self.assertEqual(self.html.count('class="board-cell"'), 4)
+
+    def test_pace_delta_is_signed(self):
+        self.assertIn(">+34<", self.html)
+
+    def test_dispatches_by_kind_not_by_slug_or_name(self):
+        # A registration tab happens to share no special name here; only the
+        # explicit "kind" field should route to the comparison renderer.
+        self.assertNotIn("Registered</span>", self.html)
+
+    def test_output_passes_the_pii_scan(self):
+        piiscan.assert_clean(self.html)
+
+    def test_no_iso_date_leaks_into_the_page(self):
+        self.assertNotRegex(self.html, r"\d{4}-\d{2}-\d{2}")
+
+    def test_mixes_cleanly_with_an_ordinary_registration_tab(self):
+        html = render.render_dashboard([TABS[0], _comparison_tab()], "now", "2026-08-14")
+        self.assertEqual(html.count('class="tab-panel'), 2)
+        self.assertIn("Registered</span>", html)  # the registration tab's board
+        self.assertIn("cmp-legend", html)  # the comparison tab's board
+        piiscan.assert_clean(html)
+
+
 if __name__ == "__main__":
     unittest.main()

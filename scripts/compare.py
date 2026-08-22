@@ -1,0 +1,100 @@
+"""Overlay this season's Travel Tryout pace against last season's.
+
+Last season is closed and frozen in scripts/history.py. This season comes
+from the live registration's own metrics["timeline"] (see aggregate.py),
+which build.py re-derives from the latest export every run -- so calling
+build_comparison() again after a fresh export is all "this season" needs to
+stay current. Nothing here is fixed at authoring time except history.py.
+
+Every ISO date (both this season's, from the live export, and the day math
+below) is converted to a day-offset + short "Mon D" label before it leaves
+this module. Nothing shaped like YYYY-MM-DD reaches render.py, because
+piiscan.py treats that shape as a possible date of birth and refuses to
+publish the page (see render.py's _countdown_attrs for the same rule).
+"""
+
+import datetime
+
+from scripts import history
+
+THIS_YEAR_LABEL = "2026-27"
+
+
+def _parse_iso(value):
+    year, month, day = (int(part) for part in value.split("-"))
+    return datetime.date(year, month, day)
+
+
+def _zero_fill(dated_points, start, through):
+    """One entry per day from start to through inclusive, day-offset keyed.
+
+    Cumulative carries flat across days with no registrations, so a gap in
+    the export (a quiet Sunday, a day nobody signed up) does not read as a
+    drop back to zero.
+    """
+    by_date = dict((point["date"], point["new"]) for point in dated_points)
+    days = []
+    running = 0
+    day = 0
+    current = start
+    while current <= through:
+        iso = current.isoformat()
+        new = by_date.get(iso, 0)
+        running += new
+        days.append({"day": day, "label": current.strftime("%b %-d"),
+                     "new": new, "cumulative": running})
+        current += datetime.timedelta(days=1)
+        day += 1
+    return days
+
+
+def _cumulative_at(days, day_index):
+    """The last known cumulative at or before day_index; 0 before the series starts."""
+    value = 0
+    for point in days:
+        if point["day"] > day_index:
+            break
+        value = point["cumulative"]
+    return value
+
+
+def build_comparison(this_year_metrics, today_iso):
+    """None if the live registration has no signups yet to compare."""
+    timeline = this_year_metrics.get("timeline") or []
+    if not timeline:
+        return None
+
+    open_date = _parse_iso(timeline[0]["date"])
+    today = _parse_iso(today_iso)
+    through = max(open_date, today)
+    this_year_days = _zero_fill(timeline, open_date, through)
+    today_day = (today - open_date).days
+    total_to_date = this_year_days[-1]["cumulative"]
+
+    last_year_days = history.TIMELINE
+    last_year_max_day = last_year_days[-1]["day"]
+    last_year_at_today = (history.TOTAL if today_day > last_year_max_day
+                           else _cumulative_at(last_year_days, today_day))
+
+    after_cutoff = sum(point["new"] for point in last_year_days
+                        if point["day"] > history.CUTOFF_DAY)
+
+    return {
+        "this_year_label": THIS_YEAR_LABEL,
+        "this_year_open_label": open_date.strftime("%b %-d"),
+        "this_year_days": this_year_days,
+        "this_year_today_day": today_day,
+        "this_year_total": total_to_date,
+        "last_year_label": history.LABEL,
+        "last_year_open_label": history.OPEN_LABEL,
+        "last_year_close_label": history.CLOSE_LABEL,
+        "last_year_days": last_year_days,
+        "last_year_total": history.TOTAL,
+        "last_year_at_same_day": last_year_at_today,
+        "pace_delta": total_to_date - last_year_at_today,
+        "callout_day": history.CUTOFF_DAY,
+        "callout_label": history.CUTOFF_LABEL,
+        "callout_count": after_cutoff,
+        "callout_pct": round(100.0 * after_cutoff / history.TOTAL),
+        "domain_days": max(this_year_days[-1]["day"], last_year_max_day),
+    }

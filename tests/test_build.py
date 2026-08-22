@@ -130,6 +130,56 @@ class MainExitCodeTests(unittest.TestCase):
             {"1126331": ("Travel Tryout", "travel-tryout", "tryout.csv", 99)}))
         self.assertEqual(code, 0)
 
+    def test_a_travel_tryout_registration_gets_a_second_comparison_tab(self):
+        code = self.run_main(state_for(
+            {"1126331": ("Travel Tryout", "travel-tryout", "tryout.csv", 4)}))
+        self.assertEqual(code, 0)
+        page = self.read_page()
+        self.assertIn("Season Comparison", page)
+
+    def test_a_registration_that_is_not_travel_tryout_gets_no_comparison_tab(self):
+        code = self.run_main(state_for(
+            {"1126197": ("Skills Course", "skills-course", "tryout.csv", 4)}))
+        self.assertEqual(code, 0)
+        page = self.read_page()
+        self.assertNotIn("Season Comparison", page)
+
+
+class FindTravelTryoutTabTests(unittest.TestCase):
+    def test_matches_case_insensitively_regardless_of_survey_id(self):
+        # A brand-new survey id gets minted every season, so matching has to
+        # go by name, not by a hardcoded id from this year's state.json.
+        tabs = [{"id": "999999", "name": "2027 LSGBA Travel Tryout Registration"}]
+        self.assertEqual(build.find_travel_tryout_tab(tabs)["id"], "999999")
+
+    def test_none_when_no_registration_is_named_travel_tryout(self):
+        tabs = [{"id": "1", "name": "Skills Course"}]
+        self.assertIsNone(build.find_travel_tryout_tab(tabs))
+
+    def test_none_on_an_empty_tab_list(self):
+        self.assertIsNone(build.find_travel_tryout_tab([]))
+
+
+class BuildComparisonTabTests(unittest.TestCase):
+    def test_none_without_a_travel_tryout_tab(self):
+        tabs = [{"id": "1", "name": "Skills Course", "metrics": {"timeline": []}}]
+        self.assertIsNone(build.build_comparison_tab(tabs, "2026-08-15"))
+
+    def test_none_when_the_travel_tryout_tab_has_no_signups_yet(self):
+        tabs = [{"id": "1", "name": "Travel Tryout", "metrics": {"timeline": []}}]
+        self.assertIsNone(build.build_comparison_tab(tabs, "2026-08-15"))
+
+    def test_carries_the_matched_tabs_priority_and_the_comparison_payload(self):
+        tabs = [{
+            "id": "1126331", "name": "Travel Tryout", "priority": 0,
+            "metrics": {"timeline": [{"date": "2026-08-13", "new": 5, "cumulative": 5}]},
+        }]
+        tab = build.build_comparison_tab(tabs, "2026-08-15")
+        self.assertEqual(tab["kind"], "comparison")
+        self.assertEqual(tab["priority"], 0)
+        self.assertEqual(tab["metrics"]["total"], 5)
+        self.assertIn("comparison", tab)
+
 
 if __name__ == "__main__":
     unittest.main()

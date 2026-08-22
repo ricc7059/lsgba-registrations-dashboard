@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts import aggregate, parse, piiscan, render, state  # noqa: E402
+from scripts import aggregate, compare, parse, piiscan, render, state  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_DOWNLOADS = os.path.expanduser("~/Downloads")
@@ -61,6 +61,37 @@ def build_tabs(data, downloads):
     return tabs, skipped, mismatches
 
 
+def find_travel_tryout_tab(tabs):
+    """The live registration to overlay against last season, whatever this
+    year's survey id happens to be -- a new one gets minted every season."""
+    for tab in tabs:
+        if "travel tryout" in (tab.get("name") or "").lower():
+            return tab
+    return None
+
+
+def build_comparison_tab(tabs, today):
+    """A second, composite tab overlaying this season against last season's
+    frozen history (scripts/history.py). None if there is no live Travel
+    Tryout registration this build, or it has no signups yet to compare."""
+    travel_tab = find_travel_tryout_tab(tabs)
+    if travel_tab is None:
+        return None
+    comparison = compare.build_comparison(travel_tab["metrics"], today)
+    if comparison is None:
+        return None
+    return {
+        "id": "travel-tryout-comparison",
+        "slug": "season-comparison",
+        "name": "Travel Tryout: Season Comparison",
+        "kind": "comparison",
+        "event": None,
+        "priority": travel_tab.get("priority", 999),
+        "metrics": {"total": comparison["this_year_total"]},
+        "comparison": comparison,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
@@ -71,9 +102,12 @@ def main():
 
     data = state.load(args.state)
     now = datetime.datetime.now()
+    today = now.strftime("%Y-%m-%d")
     tabs, skipped, mismatches = build_tabs(data, args.downloads)
-    html = render.render_dashboard(
-        tabs, now.strftime("%b %-d, %Y %-I:%M %p"), now.strftime("%Y-%m-%d"))
+    comparison_tab = build_comparison_tab(tabs, today)
+    if comparison_tab is not None:
+        tabs.append(comparison_tab)
+    html = render.render_dashboard(tabs, now.strftime("%b %-d, %Y %-I:%M %p"), today)
 
     piiscan.assert_clean(html)  # fail closed before anything touches disk
 
