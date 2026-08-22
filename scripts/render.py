@@ -300,9 +300,69 @@ def _comparison_line_svg(c):
            hits(last_days, c["last_year_label"]) + hits(this_days, c["this_year_label"])))
 
 
+def _callout_block(x0, x1, pad_top, count, date_word, date_label, pct,
+                   made_team, made_team_pct, grade_pairs):
+    """The callout for one highlighted region of the daily chart: headline
+    stats (registration count, the after/through-date qualifier, the
+    made-a-team follow-on) on the left, a per-grade tally as a proper list
+    on the right -- not text crammed into the same paragraph -- separated
+    by a hairline divider. Centred in [x0, x1].
+
+    Carries its own solid-ish backdrop card: this region of the chart still
+    has real bars in it (this season's bars can be tall enough to reach the
+    callout's own text, not just last season's), and z-order alone only
+    keeps the callout from being erased -- it does not stop a bar's own
+    count label from visually colliding with callout text at a similar
+    height. A backdrop card sized to the content, not the full band, is
+    what actually guarantees the callout stays readable regardless of bar
+    height, while the partial opacity still lets the chart show through.
+    """
+    mid_x = (x0 + x1) / 2.0
+    left_w, gap, grade_label_w, grade_num_w, pad_in = 168.0, 14.0, 30.0, 22.0, 10.0
+    grade_col_w = grade_label_w + grade_num_w
+    box_w = min(left_w + gap + grade_col_w + pad_in * 2, (x1 - x0) - 12)
+    row_h = 10.5
+    content_h = max(3 * 12, len(grade_pairs) * row_h)
+    box_h = content_h + 16
+    box_x0 = mid_x - box_w / 2.0
+    box_y0 = pad_top + 6
+
+    left_x = box_x0 + pad_in
+    divider_x = box_x0 + pad_in + left_w + gap / 2.0
+    grade_x = box_x0 + pad_in + left_w + gap
+
+    parts = [
+        '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="6" fill="%s" '
+        'fill-opacity="0.82" stroke="%s" stroke-width="1"/>'
+        % (box_x0, box_y0, box_w, box_h, SURFACE, EDGE),
+        '<text x="%.1f" y="%.1f" class="cmp-callout-title" text-anchor="start">'
+        '%d registrations</text>' % (left_x, box_y0 + 15, count),
+        '<text x="%.1f" y="%.1f" class="cmp-callout-sub" text-anchor="start">'
+        '%s %s &middot; %d%% of last season</text>'
+        % (left_x, box_y0 + 26, date_word, escape(date_label), pct),
+        '<text x="%.1f" y="%.1f" class="cmp-callout-title2" text-anchor="start">'
+        '%d made a travel team &middot; %d%%</text>'
+        % (left_x, box_y0 + 37, made_team, made_team_pct),
+        '<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="1"/>'
+        % (divider_x, box_y0 + 8, divider_x, box_y0 + box_h - 8, EDGE),
+    ]
+    grade_y = box_y0 + 13
+    for grade, grade_count in grade_pairs:
+        parts.append(
+            '<text x="%.1f" y="%.1f" class="cmp-callout-grade" text-anchor="start">'
+            '%s</text>'
+            '<text x="%.1f" y="%.1f" class="cmp-callout-grade-n" text-anchor="end">'
+            '%d</text>'
+            % (grade_x, grade_y, escape(grade),
+               grade_x + grade_col_w, grade_y, grade_count))
+        grade_y += row_h
+    return "".join(parts)
+
+
 def _comparison_bar_svg(c):
     """Daily count, this season's bars paired against last season's, on one
-    shared scale -- plus last season's after-cutoff window highlighted."""
+    shared scale -- plus last season's before/after-cutoff windows each
+    highlighted with their own callout."""
     last_days, this_days = c["last_year_days"], c["this_year_days"]
     this_by_day = dict((p["day"], p) for p in this_days)
     n = len(last_days)
@@ -325,28 +385,29 @@ def _comparison_bar_svg(c):
 
     band_x0 = pad_x + slot * (cutoff + 1)
     band_x1 = pad_x + inner_w
-    band_mid_x = (band_x0 + band_x1) / 2.0
-    grade_breakdown = " &middot; ".join(
-        "%s %d" % (escape(grade), count)
-        for grade, count in c["callout_made_team_by_grade"])
-    band = (
+    # Background tint + divider only -- drawn before the bars, so bars paint
+    # on top of the tint. The callout TEXT is composed separately and placed
+    # after the bars in the final markup, so a tall bar reaching into a
+    # callout's line height sits behind the text instead of blotting it out.
+    band_bg = (
+        '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" opacity="0.10"/>'
         '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s" opacity="0.10"/>'
         '<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="1" '
         'stroke-dasharray="3 3"/>'
-        '<text x="%.1f" y="%.1f" class="cmp-callout-title" text-anchor="middle">'
-        '%d registrations</text>'
-        '<text x="%.1f" y="%.1f" class="cmp-callout-sub" text-anchor="middle">'
-        'after %s &middot; %d%% of last season</text>'
-        '<text x="%.1f" y="%.1f" class="cmp-callout-title2" text-anchor="middle">'
-        '%d made a travel team &middot; %d%%</text>'
-        '<text x="%.1f" y="%.1f" class="cmp-callout-sub" text-anchor="middle">'
-        '%s</text>'
-        % (band_x0, pad_top, band_x1 - band_x0, inner_h, GOLD,
-           band_x0, pad_top, band_x0, pad_top + inner_h, GOLD_DIM,
-           band_mid_x, pad_top + 20, c["callout_count"],
-           band_mid_x, pad_top + 35, escape(c["callout_label"]), c["callout_pct"],
-           band_mid_x, pad_top + 54, c["callout_made_team"], c["callout_made_team_pct"],
-           band_mid_x, pad_top + 70, grade_breakdown))
+        % (pad_x, pad_top, band_x0 - pad_x, inner_h, GOLD,
+           band_x0, pad_top, band_x1 - band_x0, inner_h, GOLD,
+           band_x0, pad_top, band_x0, pad_top + inner_h, GOLD_DIM))
+    callouts = (
+        _callout_block(
+            pad_x, band_x0, pad_top, c["callout_before_count"], "through",
+            c["callout_label"], c["callout_before_pct"],
+            c["callout_before_made_team"], c["callout_before_made_team_pct"],
+            c["callout_before_made_team_by_grade"])
+        + _callout_block(
+            band_x0, band_x1, pad_top, c["callout_count"], "after",
+            c["callout_label"], c["callout_pct"],
+            c["callout_made_team"], c["callout_made_team_pct"],
+            c["callout_made_team_by_grade"]))
 
     bars = []
     for i, p in enumerate(last_days):
@@ -389,13 +450,13 @@ def _comparison_bar_svg(c):
 
     return (
         '<svg viewBox="0 0 %d %d" class="timeline cmp-timeline" role="img" '
-        'aria-label="Daily registrations, this season vs last season, with the '
-        'after-%s callout">'
+        'aria-label="Daily registrations, this season vs last season, with '
+        'before- and after-%s callouts">'
         '<line x1="%d" y1="%.1f" x2="%d" y2="%.1f" stroke="%s" stroke-width="1"/>'
-        '%s%s%s</svg>'
+        '%s%s%s%s</svg>'
         % (width, height, c["callout_label"],
            pad_x, pad_top + inner_h, width - pad_x, pad_top + inner_h, EDGE,
-           band, "".join(bars), labels))
+           band_bg, "".join(bars), labels, callouts))
 
 
 def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season_label):
@@ -740,10 +801,13 @@ font-size:8px;font-weight:700}
 .cmp-bar-label-last{fill:#D98CAA}
 .cmp-bar-label-this{fill:var(--gold)}
 .cmp-callout-title{font-family:var(--mono);font-variant-numeric:tabular-nums;
-font-size:15px;font-weight:800;fill:var(--gold)}
-.cmp-callout-sub{font-size:10.5px;fill:var(--dim)}
+font-size:11.5px;font-weight:800;fill:var(--gold)}
+.cmp-callout-sub{font-size:8px;fill:var(--dim)}
 .cmp-callout-title2{font-family:var(--mono);font-variant-numeric:tabular-nums;
-font-size:13px;font-weight:800;fill:#E8D8B8}
+font-size:10px;font-weight:800;fill:#E8D8B8}
+.cmp-callout-grade{font-size:8.5px;fill:var(--text)}
+.cmp-callout-grade-n{font-family:var(--mono);font-variant-numeric:tabular-nums;
+font-size:8.5px;font-weight:700;fill:var(--gold)}
 .cmp-heatmap-label{display:flex;align-items:center;gap:8px;margin:14px 0 4px;
 font-size:.78rem;color:var(--dim)}
 .cmp-heatmap-label:first-of-type{margin-top:0}

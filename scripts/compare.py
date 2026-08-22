@@ -134,6 +134,8 @@ def build_comparison(this_year_metrics, today_iso):
 
     after_cutoff = sum(point["new"] for point in last_year_days
                         if point["day"] > history.CUTOFF_DAY)
+    before_cutoff = sum(point["new"] for point in last_year_days
+                        if point["day"] <= history.CUTOFF_DAY)
 
     # Both seasons' grade breakdowns, on one shared, normalized grade list --
     # empty rather than missing when the live export has no grade column, so
@@ -172,6 +174,15 @@ def build_comparison(this_year_metrics, today_iso):
                                   if after_cutoff else 0),
         "callout_made_team_by_grade": sorted(
             history.MADE_TEAM_AFTER_CUTOFF_BY_GRADE.items(),
+            key=lambda pair: aggregate.grade_sort_key(pair[0])),
+        "callout_before_count": before_cutoff,
+        "callout_before_pct": round(100.0 * before_cutoff / history.TOTAL),
+        "callout_before_made_team": history.MADE_TEAM_BEFORE_CUTOFF,
+        "callout_before_made_team_pct": (
+            round(100.0 * history.MADE_TEAM_BEFORE_CUTOFF / before_cutoff)
+            if before_cutoff else 0),
+        "callout_before_made_team_by_grade": sorted(
+            history.MADE_TEAM_BEFORE_CUTOFF_BY_GRADE.items(),
             key=lambda pair: aggregate.grade_sort_key(pair[0])),
         "domain_days": max(this_year_days[-1]["day"], last_year_max_day),
         "grades": grades,

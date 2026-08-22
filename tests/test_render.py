@@ -343,6 +343,11 @@ def _comparison_tab():
             "callout_made_team": 41,
             "callout_made_team_pct": 87,
             "callout_made_team_by_grade": [("3rd", 10), ("4th", 6)],
+            "callout_before_count": 69,
+            "callout_before_pct": 59,
+            "callout_before_made_team": 55,
+            "callout_before_made_team_pct": 80,
+            "callout_before_made_team_by_grade": [("2nd", 1), ("3rd", 10)],
             "domain_days": 2,
             "grades": ["3rd", "4th"],
             "this_year_grade_days": [
@@ -422,8 +427,29 @@ class ComparisonPanelTests(unittest.TestCase):
     def test_renders_the_made_team_callout_with_grade_breakdown(self):
         self.assertIn("41 made a travel team", self.html)
         self.assertIn("87%", self.html)
-        self.assertIn("3rd 10", self.html)
-        self.assertIn("4th 6", self.html)
+        self.assertIn('class="cmp-callout-grade" text-anchor="start">3rd<', self.html)
+        self.assertIn('class="cmp-callout-grade-n" text-anchor="end">10<', self.html)
+
+    def test_renders_the_before_cutoff_callout_too(self):
+        self.assertIn("69 registrations", self.html)
+        self.assertIn("through Aug 24", self.html)
+        self.assertIn("59%", self.html)
+        self.assertIn("55 made a travel team", self.html)
+        self.assertIn("80%", self.html)
+        self.assertIn('class="cmp-callout-grade" text-anchor="start">2nd<', self.html)
+
+    def test_grade_breakdown_renders_as_a_row_per_grade(self):
+        # A proper list -- each grade on its own line, not joined into a
+        # paragraph -- with the count right-aligned like a table column.
+        tab = _comparison_tab()
+        tab["comparison"]["callout_made_team_by_grade"] = [
+            ("3rd", 10), ("4th", 6), ("5th", 8), ("6th", 5), ("7th", 8), ("8th", 4)]
+        html = render.render_dashboard([tab], "now", "2026-08-14")
+        self.assertIn('class="cmp-callout-grade" text-anchor="start">3rd<', html)
+        self.assertIn('class="cmp-callout-grade-n" text-anchor="end">10<', html)
+        self.assertIn('class="cmp-callout-grade" text-anchor="start">8th<', html)
+        self.assertIn('class="cmp-callout-grade-n" text-anchor="end">4<', html)
+        self.assertNotIn("3rd 10 &middot;", html)
 
     def test_scoreboard_is_four_cells(self):
         self.assertEqual(self.html.count('class="board-cell"'), 4)

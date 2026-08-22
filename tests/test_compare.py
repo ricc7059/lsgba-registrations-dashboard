@@ -92,6 +92,27 @@ class BuildComparisonTests(unittest.TestCase):
         grades = [grade for grade, _ in result["callout_made_team_by_grade"]]
         self.assertEqual(grades, sorted(grades, key=aggregate.grade_sort_key))
 
+    def test_before_and_after_counts_reconcile_to_the_season_total(self):
+        metrics = {"timeline": [{"date": "2026-08-13", "new": 1, "cumulative": 1}]}
+        result = compare.build_comparison(metrics, "2026-08-13")
+        self.assertEqual(result["callout_before_count"] + result["callout_count"],
+                         history.TOTAL)
+
+    def test_before_made_team_stats_pass_through_from_history_unchanged(self):
+        metrics = {"timeline": [{"date": "2026-08-13", "new": 1, "cumulative": 1}]}
+        result = compare.build_comparison(metrics, "2026-08-13")
+        self.assertEqual(result["callout_before_made_team"],
+                         history.MADE_TEAM_BEFORE_CUTOFF)
+        self.assertEqual(dict(result["callout_before_made_team_by_grade"]),
+                         history.MADE_TEAM_BEFORE_CUTOFF_BY_GRADE)
+
+    def test_before_made_team_pct_is_relative_to_the_before_cutoff_count(self):
+        metrics = {"timeline": [{"date": "2026-08-13", "new": 1, "cumulative": 1}]}
+        result = compare.build_comparison(metrics, "2026-08-13")
+        expected = round(100.0 * history.MADE_TEAM_BEFORE_CUTOFF
+                         / result["callout_before_count"])
+        self.assertEqual(result["callout_before_made_team_pct"], expected)
+
     def test_domain_spans_the_longer_of_the_two_seasons(self):
         metrics = {"timeline": [{"date": "2026-08-13", "new": 1, "cumulative": 1}]}
         result = compare.build_comparison(metrics, "2026-08-13")

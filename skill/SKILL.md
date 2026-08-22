@@ -161,20 +161,37 @@ comparison mean anything:
    bar, plus last season's after-cutoff window highlighted, with the callout
    text drawn *inside* that highlighted band rather than as a separate note
    above the chart — the highlight and its explanation are one visual unit.
-   The callout has two parts, both last season's numbers only (neither is
-   re-evaluated against this season):
-   - "N registrations after Aug 24 · X% of last season" — from
+   The chart actually carries **two** callouts side by side, splitting the
+   season at the same cutoff day: one for on-or-before Aug 24 ("through Aug
+   24"), one for after. Both are last season's numbers only (neither is
+   re-evaluated against this season), and each has the same two parts:
+   - "N registrations {through/after} Aug 24 · X% of last season" — from
      `history.CUTOFF_DAY`/`CUTOFF_LABEL`, as before.
    - "N made a travel team · X%" plus a by-grade breakdown — a one-time
-     cross-reference (by name, cross-checked on grade) of those after-cutoff
+     cross-reference (by name, cross-checked on grade) of that half-season's
      registrants against the 2025 team-acceptance roster, frozen as
-     `history.MADE_TEAM_AFTER_CUTOFF` / `MADE_TEAM_AFTER_CUTOFF_BY_GRADE`
-     (see that constant's comment for the exact method and its one known
-     gap: one accepted player had no name match in the registration export
-     and is excluded). Like everything else in `history.py`, this can't be
-     refreshed by this skill — it was computed once, by hand, from a private
-     roster file that is never committed, and it never needs to be
+     `history.MADE_TEAM_AFTER_CUTOFF`/`_BY_GRADE` and
+     `history.MADE_TEAM_BEFORE_CUTOFF`/`_BY_GRADE` (see the after-cutoff
+     constant's comment for the exact method and its one known gap: one
+     accepted player had no name match in the registration export and is
+     excluded from both). Like everything else in `history.py`, this can't
+     be refreshed by this skill — it was computed once, by hand, from a
+     private roster file that is never committed, and it never needs to be
      recomputed unless the underlying source files turn out to be wrong.
+
+   Each callout draws its own backdrop card behind its content (see
+   `render._callout_block`) rather than relying on draw order alone. This
+   region of the chart still has real, sometimes-tall bars in it — z-order
+   only keeps a callout from being erased by a bar drawn after it; it does
+   not stop a bar's own count label from visually colliding with callout
+   text at a similar height. A sized backdrop is what actually guarantees
+   it, regardless of how tall this season's bars get as more days come in.
+   The card itself is two columns, not one paragraph: headline stats (the
+   registration count, the made-a-team line) on the left, the grade tally as
+   an actual list -- one row per grade, count right-aligned -- on the right,
+   split by a hairline divider. The card is sized to its own content (not
+   the full highlighted band) and partially transparent (`fill-opacity`,
+   not fully opaque), so a bar can still be seen passing behind it.
 3. **Daily registrations by grade** — a heatmap, one grid per season stacked
    vertically (not a stacked bar chart — that read poorly with this many
    grade categories). Rows are grade, columns are day-offset, and cell shade

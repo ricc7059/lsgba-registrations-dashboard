@@ -79,5 +79,28 @@ class MadeTeamAfterCutoffIntegrityTests(unittest.TestCase):
             self.assertNotRegex(grade, r"(?i)grade")
 
 
+class MadeTeamBeforeCutoffIntegrityTests(unittest.TestCase):
+    def test_by_grade_breakdown_sums_to_the_total(self):
+        self.assertEqual(sum(history.MADE_TEAM_BEFORE_CUTOFF_BY_GRADE.values()),
+                         history.MADE_TEAM_BEFORE_CUTOFF)
+
+    def test_cannot_exceed_the_total_before_cutoff_registrations(self):
+        before_cutoff_total = sum(point["new"] for point in history.TIMELINE
+                                  if point["day"] <= history.CUTOFF_DAY)
+        self.assertLessEqual(history.MADE_TEAM_BEFORE_CUTOFF, before_cutoff_total)
+
+    def test_grade_labels_are_short_form(self):
+        for grade in history.MADE_TEAM_BEFORE_CUTOFF_BY_GRADE:
+            self.assertNotRegex(grade, r"(?i)grade")
+
+    def test_before_and_after_made_team_totals_reconcile_to_the_full_roster(self):
+        # Every made-team player who registered at all falls into exactly one
+        # of the two buckets (CUTOFF_DAY splits the season in half) -- their
+        # sum is the total number of registrants who made a team, cross
+        # checked against the join's own count (96) when this was computed.
+        combined = history.MADE_TEAM_BEFORE_CUTOFF + history.MADE_TEAM_AFTER_CUTOFF
+        self.assertEqual(combined, 96)
+
+
 if __name__ == "__main__":
     unittest.main()

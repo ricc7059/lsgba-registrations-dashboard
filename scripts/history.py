@@ -111,3 +111,12 @@ MADE_TEAM_AFTER_CUTOFF = 41
 MADE_TEAM_AFTER_CUTOFF_BY_GRADE = {
     "3rd": 10, "4th": 6, "5th": 8, "6th": 5, "7th": 8, "8th": 4,
 }
+
+# The mirror stat: of the 69 registrants through CUTOFF_DAY (day <=
+# CUTOFF_DAY, i.e. on or before Aug 24), how many made a travel team. Same
+# one-time cross-reference, same source, same exclusion of the one accepted
+# player with no name match in the registration export.
+MADE_TEAM_BEFORE_CUTOFF = 55
+MADE_TEAM_BEFORE_CUTOFF_BY_GRADE = {
+    "2nd": 1, "3rd": 10, "4th": 9, "5th": 20, "6th": 4, "7th": 7, "8th": 4,
+}
