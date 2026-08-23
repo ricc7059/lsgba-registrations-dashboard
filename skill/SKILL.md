@@ -251,9 +251,13 @@ below.
    not just the visible range, so it stays right even though the two grids
    don't span the same number of columns (last season's is the full 31-day
    window; this season's stops at today).
-4. **Grade-cohort flow** — a diverging bar chart to the right of this
-   season's compact heatmap, in the space its compactness frees up (see
-   `_flow_diagram_svg`). It compares last season's grade *G* against this
+4. **Grade-cohort flow** — a diverging bar chart in the space this season's
+   compact heatmap frees up to its right, anchored to the *right* edge of
+   that space (`.cmp-flow-block{margin-left:auto}` in the stylesheet) so it
+   lines up under the right edge of last season's full-width grid above it,
+   rather than sitting flush against the compact heatmap with a gap of empty
+   card on the far side. See `_flow_diagram_svg`. It compares last season's
+   grade *G* against this
    season's grade *G+1* — the same cohort of students, one grade further
    along (last season's 3rd grade is this season's 4th grade) — as one row
    per transition, bars extending right/green (`FLOW_POS`, this season's
