@@ -382,6 +382,14 @@ def _comparison_tab():
                 {"day": 2, "label": "Aug 13",
                  "counts": {"3rd": 0, "4th": 0}, "total": 0},
             ],
+            # last_year 3rd total = 21, this_year 4th total = 23 (see the
+            # per-grade totals asserted in test_heatmap_shows_a_per_grade_
+            # total_column) -- 4th has no next grade in `grades` so it has
+            # no row of its own, matching compare._grade_flow's own rule.
+            "grade_flow": [
+                {"from_grade": "3rd", "to_grade": "4th",
+                 "last_count": 21, "this_count": 23, "delta": 2},
+            ],
         },
     }
 
@@ -440,14 +448,16 @@ class ComparisonPanelTests(unittest.TestCase):
         # last_year_days day 2 is 0 -- present as a bar, not as a "0" label.
         self.assertNotIn('cmp-bar-label-last" text-anchor="middle">0<', self.html)
 
-    def test_renders_four_svg_charts(self):
-        # Cumulative overlay, daily overlay, and one heatmap per season.
-        self.assertEqual(self.html.count("<svg"), 4)
+    def test_renders_five_svg_charts(self):
+        # Cumulative overlay, daily overlay, one heatmap per season, and the
+        # grade-flow diagram.
+        self.assertEqual(self.html.count("<svg"), 5)
 
     def test_grade_breakdown_is_dropped_when_neither_season_has_grade_data(self):
         tab = _comparison_tab()
         tab["comparison"] = dict(tab["comparison"], grades=[],
-                                 this_year_grade_days=[], last_year_grade_days=[])
+                                 this_year_grade_days=[], last_year_grade_days=[],
+                                 grade_flow=[])
         html = render.render_dashboard([tab], "now", "2026-08-14")
         self.assertEqual(html.count("<svg"), 2)
         self.assertNotIn("by grade", html)
@@ -483,6 +493,59 @@ class ComparisonPanelTests(unittest.TestCase):
         # last_year: 3rd = 1+20+0 = 21, 4th = 3+8+0 = 11.
         self.assertIn('class="cmp-heat-total" text-anchor="end">21<', self.html)
         self.assertIn('class="cmp-heat-total" text-anchor="end">11<', self.html)
+
+    def test_flow_diagram_shows_the_grade_transition_and_signed_delta(self):
+        # Fixture's one grade_flow row: 3rd (21) -> 4th (23), delta +2. It's
+        # also the only row, so it's the max-magnitude bar and wide enough
+        # to draw its label inside itself (contrast ink over the fill).
+        self.assertIn("3rd&rarr;4th", self.html)
+        self.assertIn('class="cmp-flow-n cmp-flow-n-pos" text-anchor="end" '
+                      'style="fill:%s">+2<' % render.GROUND, self.html)
+
+    def test_flow_diagram_bar_carries_both_seasons_counts_in_its_title(self):
+        self.assertIn("21", self.html)
+        self.assertIn("an inflow of 2 players", self.html)
+
+    def test_flow_diagram_is_omitted_when_there_is_no_grade_flow_data(self):
+        tab = _comparison_tab()
+        tab["comparison"] = dict(tab["comparison"], grade_flow=[])
+        html = render.render_dashboard([tab], "now", "2026-08-14")
+        self.assertEqual(html.count("<svg"), 4)
+        # "cmp-flow-block" itself still appears once, in the stylesheet's
+        # rule for the class -- check for the actual element, not the name.
+        self.assertNotIn('class="cmp-flow-block"', html)
+
+    def test_flow_diagram_wide_bar_label_never_reaches_the_row_label_column(self):
+        # A near-max-magnitude bar spans almost the full half-width; its
+        # signed label must land inside the bar (not just outside its tip,
+        # see FlowDiagramLayoutTests) or it collides with the row's grade
+        # label at the far left -- this happened once with a real -10 row
+        # rendering as "5th->6th-10" overlapping the axis text.
+        flow = [
+            {"from_grade": "5th", "to_grade": "6th",
+             "last_count": 30, "this_count": 20, "delta": -10},
+        ]
+        svg = render._flow_diagram_svg(flow, render._heatmap_height(1))
+        label_x = float(re.search(
+            r'x="([\d.]+)"[^>]*class="cmp-flow-n cmp-flow-n-neg"', svg).group(1))
+        row_x = float(re.search(
+            r'x="([\d.]+)"[^>]*class="axis cmp-flow-label"', svg).group(1))
+        # The label's own x sits to the right of (greater than) the row
+        # label's x -- i.e. inside the plot, never spilling into the axis
+        # label's territory to its left.
+        self.assertGreater(label_x, row_x)
+
+    def test_this_years_heatmap_is_left_aligned_from_day_zero_not_calendar_shifted(self):
+        # calendar_shift is 2 in the fixture -- if the heatmap still shifted
+        # by it (like the daily bar chart does), this season's day-0 cell
+        # would start two columns in. It must not: the user asked for this
+        # grid to go back to plain left alignment.
+        days = _comparison_tab()["comparison"]["this_year_grade_days"]
+        this_heatmap = render._comparison_heatmap_svg(
+            days, ["3rd", "4th"], render.GOLD, 40, 2, "2026-27", n_cols=2)
+        first_cell_x = float(re.findall(r'<rect x="([\d.]+)"', this_heatmap)[0])
+        pad_left = 46
+        self.assertAlmostEqual(first_cell_x, pad_left, delta=0.5)
 
     def test_every_day_gets_its_own_rotated_axis_label(self):
         # 4 charts on the tab (cumulative, daily, 2 heatmaps), all switched to

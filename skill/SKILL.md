@@ -164,22 +164,30 @@ once it closes, freeze this season's numbers into `scripts/history.py` the
 same way (see that file's header) and update `THIS_YEAR_LABEL` in
 `scripts/compare.py`.
 
-The tab has four charts. The cumulative chart aligns by **day of
+The tab has five charts. The cumulative chart aligns by **day of
 registration window** (day 0 = the day registration opened) rather than
 calendar date, deliberately — the two seasons open a couple of days apart,
 and a shared day-offset axis is what makes a same-point-in-season pace
-comparison mean anything. The other three (daily bars, both heatmap grids)
-align by **actual calendar date** instead — a bar or cell under the "Aug 13"
-tick is that season's real Aug 13, not whatever day-of-window happened to
-land there. `compare.py`'s `calendar_shift` is the gap in days between the
-two seasons' opening dates (e.g. +2 when this season opens Aug 13 and last
-season opened Aug 11); the daily chart and heatmap shift this season's bars
-and cells by that amount before plotting them, so the two seasons' actual
-matching dates line up instead of their day-*offsets*. This distinction
-matters: before this shift existed, this season's Aug 13 registrations were
-plotted under an "Aug 11" label (borrowed from last season, which is the
-axis's calendar reference), which read as if they had happened two days
-before the registration actually opened.
+comparison mean anything. The daily bar chart aligns by **actual calendar
+date** instead — a bar under the "Aug 13" tick is that season's real Aug 13,
+not whatever day-of-window happened to land there. `compare.py`'s
+`calendar_shift` is the gap in days between the two seasons' opening dates
+(e.g. +2 when this season opens Aug 13 and last season opened Aug 11); the
+daily chart shifts this season's bars by that amount before plotting them,
+so the two seasons' actual matching dates line up instead of their
+day-*offsets*. This distinction matters: before this shift existed, this
+season's Aug 13 registrations were plotted under an "Aug 11" label (borrowed
+from last season, which is the axis's calendar reference), which read as if
+they had happened two days before the registration actually opened.
+
+The by-grade heatmap grids (below) are the one chart that does *not* use
+`calendar_shift` — this season's grid is deliberately plain day-of-window,
+left-aligned from its own day 0, not calendar-aligned under last season's
+grid above it. An earlier version of this skill did calendar-align it (the
+same way the daily chart still does); the user asked for that to be reverted
+so this season's grid stays compact and its Total column sits right next to
+it instead of out at the far edge of a full-width canvas — see chart 3
+below.
 
 1. **Cumulative registrations** — both seasons' running totals overlaid, by
    day-of-window (not calendar-shifted — see above).
@@ -215,16 +223,22 @@ before the registration actually opened.
    draw order last, so a tall bar never paints over it.
 3. **Daily registrations by grade** — a heatmap, one grid per season stacked
    vertically (not a stacked bar chart — that read poorly with this many
-   grade categories), calendar-aligned like the daily chart above (this
-   season's grid takes `day_shift=calendar_shift` so its columns sit under
-   the matching calendar-date columns in last season's grid above it, not
-   under last season's day-of-window-equivalent columns). Rows are grade,
-   columns are day-offset, and cell shade is that season's own identity
-   colour (maroon for last season, gold for this season) at an opacity
-   scaled to the count, on one shared 0–max scale across both grids so
-   "darker" means the same thing in both. This season's grid only draws
-   cells through today — a day that hasn't happened yet stays blank rather
-   than reading as a false zero.
+   grade categories). Last season's grid spans the full season (up to 31
+   columns, `domain_days`-wide); this season's grid is compact — only as many
+   columns as it actually has days, left-aligned from its own day 0 (see the
+   calendar-alignment note above) — so its canvas is only as wide as it needs
+   to be and its **Total** column lands immediately to its right, not out at
+   a fixed 860px edge with a lot of empty space in between. Column pixel
+   width (`slot`, in `_comparison_heatmap_svg`) is still derived from last
+   season's full-width canvas, so a day is the same width in both grids even
+   though this season's is narrower overall — pass `n_cols=<this season's day
+   count>` to get that; leaving it unset renders the full-width grid, which
+   is what last season's call still does. Rows are grade, columns are
+   day-offset, and cell shade is that season's own identity colour (maroon
+   for last season, gold for this season) at an opacity scaled to the count,
+   on one shared 0–max scale across both grids so "darker" means the same
+   thing in both. This season's grid only draws cells through today — a day
+   that hasn't happened yet stays blank rather than reading as a false zero.
 
    Every nonzero cell is directly labelled with its count (see
    `_comparison_heatmap_svg`); text colour is picked per cell, not fixed, by
@@ -237,17 +251,44 @@ before the registration actually opened.
    not just the visible range, so it stays right even though the two grids
    don't span the same number of columns (last season's is the full 31-day
    window; this season's stops at today).
+4. **Grade-cohort flow** — a diverging bar chart to the right of this
+   season's compact heatmap, in the space its compactness frees up (see
+   `_flow_diagram_svg`). It compares last season's grade *G* against this
+   season's grade *G+1* — the same cohort of students, one grade further
+   along (last season's 3rd grade is this season's 4th grade) — as one row
+   per transition, bars extending right/green (`FLOW_POS`, this season's
+   cohort grew) or left/red (`FLOW_NEG`, it shrank) from a zero centerline.
+   `compare._grade_flow` builds the data (`comparison["grade_flow"]`): it
+   only emits a row when the *next* grade actually appears somewhere in the
+   shared `grades` list — so 8th grade (this club has never had a 9th) gets
+   no row at all, not an invented "graduated" category, while a grade that
+   exists in `grades` but currently has zero registrants still gets a real
+   (and informative) negative-delta row. The signed delta is always drawn as
+   a visible label, never colour alone — inside the bar near its outward tip
+   when the bar is wide enough to hold it, otherwise just outside the tip, on
+   the side moving *away* from the row's grade-transition label (this
+   avoids a label collision that showed up once as "5th→6th-10" when a
+   near-max-magnitude bar's outside label ran into the axis text — see
+   `_flow_diagram_svg`'s docstring). Its rows share row height/spacing with
+   the heatmap beside it (`_heatmap_height`) so the two line up visually,
+   though the flow diagram is normally one row shorter (no 8th-grade row).
+   FLOW_POS/FLOW_NEG were validated with the dataviz skill's
+   `validate_palette.js` against the card's dark surface: PASS on lightness,
+   chroma, and contrast; the colorblind-separation check is a WARN, which is
+   legal only with a secondary encoding — satisfied here by both the
+   left/right position and the always-visible signed number.
 
-All four charts on this tab (the three above, plus the by-grade heatmap
-rows' day axis) label **every day**, not every 5th — with 31 possible days
-that only fits by rotating each label -90° (see `_vertical_axis_labels`).
-The rotation anchor matters: it must sit just past the plot's own baseline
-(axis line, or the heatmap grid's bottom edge) with the label extending
-*away* from the plot into the padding reserved for it — anchoring near the
-SVG's outer edge instead leaves most of the label with nowhere to render
-and it clips silently (this happened once: only each label's last character
-survived, e.g. "Day 12" showing as "2"). If a label ever looks truncated
-again, check the anchor's distance from the SVG's own bottom edge first.
+All charts on this tab that have a day axis (cumulative, daily bars, both
+heatmap grids) label **every day**, not every 5th — with up to 31 possible
+days that only fits by rotating each label -90° (see
+`_vertical_axis_labels`). The rotation anchor matters: it must sit just past
+the plot's own baseline (axis line, or the heatmap grid's bottom edge) with
+the label extending *away* from the plot into the padding reserved for it —
+anchoring near the SVG's outer edge instead leaves most of the label with
+nowhere to render and it clips silently (this happened once: only each
+label's last character survived, e.g. "Day 12" showing as "2"). If a label
+ever looks truncated again, check the anchor's distance from the SVG's own
+bottom edge first.
 
 Both seasons' exports spell grade differently ("3rd Grade" this season, "3rd"
 last season, per each export's own grade question) — `compare.py` normalizes

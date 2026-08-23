@@ -25,6 +25,13 @@ SURFACE_2 = "#262A30"
 EDGE = "#31363E"
 TEXT = "#ECEDEF"
 TEXT_DIM = "#8E959F"
+# Diverging pair for the grade-flow diagram, validated colorblind-safe against
+# SURFACE with scripts/validate_palette.js (dataviz skill): PASS on lightness,
+# chroma, and contrast; the CVD-separation WARN (6.8-31.9 dE) is legal only
+# with secondary encoding, which every bar already carries (position left/right
+# of the zero baseline, plus an always-visible signed number).
+FLOW_POS = "#46AD69"      # inflow -- this season ahead of last season's cohort
+FLOW_NEG = "#CB4D57"      # outflow -- this season behind last season's cohort
 
 NO_RESPONSE = "No response"
 
@@ -480,8 +487,20 @@ def _comparison_bar_svg(c):
            band_bg, "".join(bars), labels, callouts))
 
 
+# Shared row geometry between the by-grade heatmap and the flow diagram next
+# to it, so the two SVGs' rows land at the same y even though they're drawn
+# independently -- see _heatmap_height.
+_HEAT_ROW_H, _HEAT_ROW_GAP, _HEAT_PAD_TOP, _HEAT_PAD_BOTTOM = 20, 2, 16, 42
+_HEAT_FULL_WIDTH, _HEAT_PAD_LEFT, _HEAT_PAD_RIGHT = 860, 46, 40
+
+
+def _heatmap_height(n_rows):
+    return (_HEAT_PAD_TOP + n_rows * (_HEAT_ROW_H + _HEAT_ROW_GAP) - _HEAT_ROW_GAP
+            + _HEAT_PAD_BOTTOM)
+
+
 def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season_label,
-                            day_shift=0):
+                            n_cols=None):
     """One season's day-by-grade grid. Colour is fixed (the season's own
     identity hue, matching the other two charts); fill-opacity carries the
     count, on a scale the caller shares across both seasons' grids so
@@ -495,24 +514,27 @@ def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season
     beyond it (this season, before it happens) draws no cell at all rather
     than a zero, so "not yet known" reads differently from "genuinely zero".
 
-    `day_shift` moves this grid's columns by that many day-offsets so the two
-    stacked grids line up by actual calendar date instead of day-of-window --
-    last season's grid passes 0 (it is the reference), this season's passes
-    compare.py's calendar_shift so its Aug 13 column sits under the Aug 13
-    column two slots into last season's, not directly under last season's
-    Aug 11.
+    Column width (`slot`) is always derived from the full `domain_days`-wide
+    canvas, so a day is the same pixel width in both grids even when one of
+    them is narrower. `n_cols`, when given, renders only that many columns
+    and shrinks the canvas to fit them -- used for this season's grid so it
+    stays compact (just its own day count, left-aligned from day 0) with its
+    Total column landing right next to it, rather than spanning the full
+    31-day canvas at a fixed offset. The two grids are intentionally *not*
+    calendar-aligned against each other here -- unlike the daily chart, which
+    still uses compare.py's calendar_shift.
     """
-    n_cols = domain_days + 1
-    width = 860
-    # pad_top makes room for the "Total" column header; pad_right for the
-    # totals themselves; pad_bottom for one rotated label per day (every
-    # day gets one now, not just every 5th).
-    pad_left, pad_top, pad_right, pad_bottom = 46, 16, 40, 42
-    row_h, row_gap = 20, 2
+    full_cols = domain_days + 1
+    cols = full_cols if n_cols is None else n_cols
+    pad_left, pad_top, pad_right, pad_bottom = (
+        _HEAT_PAD_LEFT, _HEAT_PAD_TOP, _HEAT_PAD_RIGHT, _HEAT_PAD_BOTTOM)
+    row_h, row_gap = _HEAT_ROW_H, _HEAT_ROW_GAP
     rows = len(grades)
-    height = pad_top + rows * (row_h + row_gap) - row_gap + pad_bottom
-    inner_w = width - pad_left - pad_right
-    slot = inner_w / float(n_cols)
+    height = _heatmap_height(rows)
+    full_inner_w = _HEAT_FULL_WIDTH - pad_left - pad_right
+    slot = full_inner_w / float(full_cols)
+    inner_w = slot * cols
+    width = pad_left + inner_w + pad_right
     cell_w = max(slot - 2, 1.0)
 
     def cx(day_i):
@@ -521,7 +543,7 @@ def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season
     def cy(row_i):
         return pad_top + row_i * (row_h + row_gap)
 
-    grid_right = pad_left + n_cols * slot
+    grid_right = pad_left + cols * slot
     total_x = width - 6
     divider_x = grid_right + 8
 
@@ -543,7 +565,7 @@ def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season
             count = p["counts"].get(grade, 0)
             row_totals[grade] += count
             opacity = 0.0 if not count else max(0.16, min(1.0, count / float(max_count)))
-            cell_x = cx(p["day"] + day_shift)
+            cell_x = cx(p["day"])
             cells.append(
                 '<rect x="%.1f" y="%.1f" width="%.1f" height="%d" rx="2" '
                 'fill="%s" fill-opacity="%.2f" stroke="%s" stroke-width="1">'
@@ -563,14 +585,106 @@ def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season
             '%d</text>' % (total_x, cy(row_i) + row_h / 2.0 + 3, row_totals[grade]))
 
     labels = _vertical_axis_labels(
-        (cx(p["day"] + day_shift) + cell_w / 2.0, height - pad_bottom + 8, p["label"])
+        (cx(p["day"]) + cell_w / 2.0, height - pad_bottom + 8, p["label"])
         for p in days)
 
     return (
-        '<svg viewBox="0 0 %d %d" class="timeline cmp-heatmap" role="img" '
-        'aria-label="%s registrations by day and grade, with per-grade totals">'
-        '%s%s</svg>'
-        % (width, height, escape(season_label), "".join(cells), labels))
+        '<svg viewBox="0 0 %d %d" width="%d" height="%d" class="timeline cmp-heatmap" '
+        'role="img" aria-label="%s registrations by day and grade, with per-grade '
+        'totals">%s%s</svg>'
+        % (width, height, width, height, escape(season_label), "".join(cells), labels))
+
+
+def _flow_word(delta):
+    if delta > 0:
+        return "an inflow of %d players compared to last season" % delta
+    if delta < 0:
+        return "an outflow of %d players compared to last season" % -delta
+    return "even with last season"
+
+
+def _flow_diagram_svg(flow, height):
+    """Last season's grade G against this season's grade G+1 -- the same
+    cohort, one grade further along (3rd grade last season is 4th grade this
+    season) -- as diverging bars from a zero centerline: green/right when
+    this season's cohort grew, red/left when it shrank. `height` is passed in
+    by the caller as _heatmap_height(len(grades)) so this SVG's rows line up
+    with this season's heatmap grid beside it, even though the two are drawn
+    independently and this diagram only has one row per *transition*
+    (`flow` is already missing a row for any grade with no next grade in
+    the shared grade list -- see compare._grade_flow -- so it is naturally
+    one row shorter than the heatmap whenever the oldest grade has no next
+    grade to compare against, e.g. 8th has no "9th").
+
+    Every bar carries its signed delta as a directly-visible label (never
+    color alone -- see FLOW_POS/FLOW_NEG's colorblind note) plus a <title>
+    spelling out both seasons' counts.
+    """
+    width = 300
+    pad_left, pad_right = 54, 32
+    row_h, row_gap, pad_top = _HEAT_ROW_H, _HEAT_ROW_GAP, _HEAT_PAD_TOP
+    inner_w = width - pad_left - pad_right
+    half_w = inner_w / 2.0
+    mid_x = pad_left + half_w
+    max_abs = max([abs(row["delta"]) for row in flow] or [0]) or 1
+
+    def cy(row_i):
+        return pad_top + row_i * (row_h + row_gap)
+
+    bottom = cy(max(len(flow) - 1, 0)) + row_h
+    parts = [
+        '<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" stroke-width="1"/>'
+        % (mid_x, pad_top - 4, mid_x, bottom + 4, EDGE)
+    ]
+    for row_i, row in enumerate(flow):
+        delta = row["delta"]
+        bar_w = max((abs(delta) / float(max_abs)) * (half_w - 6), 1.0 if delta else 0.0)
+        colour = FLOW_POS if delta >= 0 else FLOW_NEG
+        bar_x = mid_x if delta >= 0 else mid_x - bar_w
+        row_y = cy(row_i)
+        mid_y = row_y + row_h / 2.0 + 3
+        parts.append(
+            '<text x="%.1f" y="%.1f" class="axis cmp-flow-label" text-anchor="end">'
+            '%s&rarr;%s</text>'
+            % (mid_x - half_w - 6, mid_y, escape(row["from_grade"]), escape(row["to_grade"])))
+        if bar_w:
+            parts.append(
+                '<rect x="%.1f" y="%.1f" width="%.1f" height="%d" rx="2" fill="%s">'
+                '<title>%s (%d) to %s (%d): %s</title></rect>'
+                % (bar_x, row_y, bar_w, row_h, colour,
+                   escape(row["from_grade"]), row["last_count"],
+                   escape(row["to_grade"]), row["this_count"],
+                   escape(_flow_word(delta))))
+        # A wide-enough bar draws its label inside itself, near the outward
+        # tip -- a bar near max_abs reaches almost to the row label on its
+        # left, and a label placed outside it (as a short bar's is) would
+        # collide with that text (see the -10/-9 rows this once clipped
+        # into "5th->6th-10"). A short bar has no room for inside text, so
+        # it keeps the outside label, on the tip's outward side only -- that
+        # side is the one moving *away* from the row label as bar_w shrinks.
+        label_fits_inside = bar_w >= 22.0
+        if delta >= 0:
+            label_x = bar_x + bar_w - 4 if label_fits_inside else bar_x + bar_w + 4
+            anchor = "end" if label_fits_inside else "start"
+        else:
+            label_x = bar_x + 4 if label_fits_inside else bar_x - 4
+            anchor = "start" if label_fits_inside else "end"
+        # style=, not fill= -- the .cmp-flow-n-pos/-neg stylesheet rule sets
+        # fill too and, as a stylesheet rule, beats a plain presentation
+        # attribute; only an inline style can override it per row.
+        label_fill = (' style="fill:%s"' % _cell_text_colour(colour, 1.0)
+                     if label_fits_inside else "")
+        parts.append(
+            '<text x="%.1f" y="%.1f" class="cmp-flow-n cmp-flow-n-%s" text-anchor="%s"%s>'
+            '%s</text>'
+            % (label_x, mid_y, "pos" if delta >= 0 else "neg", anchor, label_fill,
+               _signed(delta)))
+
+    return (
+        '<svg viewBox="0 0 %d %d" width="%d" height="%d" class="timeline cmp-flow" '
+        'role="img" aria-label="In-flow and out-flow of registrants by grade '
+        'progression, last season to this season">%s</svg>'
+        % (width, height, width, height, "".join(parts)))
 
 
 def _cmp_series_legend(c):
@@ -610,19 +724,30 @@ def _comparison_panel(tab, slug, is_first):
             c["domain_days"], c["last_year_label"])
         this_heatmap = _comparison_heatmap_svg(
             c["this_year_grade_days"], c["grades"], GOLD, max_count,
-            c["domain_days"], c["this_year_label"], day_shift=c["calendar_shift"])
+            c["domain_days"], c["this_year_label"], n_cols=len(c["this_year_grade_days"]))
+        flow_svg = ""
+        if c["grade_flow"]:
+            flow_svg = (
+                '<div class="cmp-flow-block">'
+                '<p class="cmp-flow-title">Grade-cohort flow '
+                '<span class="cmp-flow-sub">vs last season, one grade up</span></p>'
+                '%s</div>'
+                % _flow_diagram_svg(c["grade_flow"], _heatmap_height(len(c["grades"]))))
         grade_card = (
             '  <section class="card wide"><h3>Daily registrations by grade '
             '<span class="sub">both seasons, same day-and-grade scale</span></h3>'
             '<p class="cmp-heatmap-label"><span class="cmp-legend-key cmp-last"></span>'
             '%s season</p>%s'
             '<p class="cmp-heatmap-label"><span class="cmp-legend-key cmp-this"></span>'
-            '%s season</p>%s'
+            '%s season</p>'
+            '<div class="cmp-heat-row">%s%s</div>'
             '<p class="cmp-note">Darker = more registrations that day; both grids '
-            'share the same 0&ndash;%d scale.</p>'
+            'share the same 0&ndash;%d scale. Grade-cohort flow compares last '
+            'season&rsquo;s grade to this season&rsquo;s grade one level up (3rd '
+            '&rarr; 4th, etc.) &mdash; the same students, a year later.</p>'
             '</section>'
             % (escape(c["last_year_label"]), last_heatmap,
-               escape(c["this_year_label"]), this_heatmap, max_count))
+               escape(c["this_year_label"]), this_heatmap, flow_svg, max_count))
 
     return (
         '<section class="tab-panel%s" id="panel-%s" role="tabpanel" aria-label="%s">'
@@ -876,6 +1001,23 @@ font-size:8px;font-weight:700}
 font-size:9.5px;font-weight:800;fill:var(--gold)}
 .cmp-heat-total-head{font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;
 fill:var(--dim)}
+.cmp-heat-row{display:flex;align-items:flex-start;flex-wrap:wrap;gap:22px;
+margin-top:2px}
+/* the shared .timeline rule stretches every chart SVG to its card's full
+   width -- fine for the full-width charts, wrong here, where this season's
+   heatmap is deliberately compact and the flow diagram sits beside it at its
+   own natural size. */
+.cmp-heat-row .timeline{width:auto;height:auto;max-width:100%%;flex:0 0 auto}
+.cmp-flow-block{flex:1 1 220px;min-width:220px}
+.cmp-flow-title{margin:0 0 6px;font-size:.7rem;letter-spacing:.06em;
+text-transform:uppercase;color:var(--dim);font-weight:700}
+.cmp-flow-title .cmp-flow-sub{text-transform:none;letter-spacing:0;
+font-weight:500;font-size:.72rem}
+.cmp-flow .axis{font-size:9.5px}
+.cmp-flow-n{font-family:var(--mono);font-variant-numeric:tabular-nums;
+font-size:9px;font-weight:800}
+.cmp-flow-n-pos{fill:#46AD69}
+.cmp-flow-n-neg{fill:#CB4D57}
 
 @media(max-width:860px){
 .shell{flex-direction:column}

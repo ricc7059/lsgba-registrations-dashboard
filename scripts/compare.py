@@ -114,6 +114,64 @@ def _cumulative_at(days, day_index):
     return value
 
 
+def _grade_totals(grade_days, grades):
+    """Season total per grade, summed across every day the grid covers."""
+    totals = dict((grade, 0) for grade in grades)
+    for point in grade_days:
+        for grade in grades:
+            totals[grade] += point["counts"].get(grade, 0)
+    return totals
+
+
+_ORDINAL_NUM_RE = re.compile(r"^(\d+)")
+
+
+def _next_grade_label(grade):
+    """'3rd' -> '4th', by grade number, not by list position -- so a gap in
+    either season's grades (a grade nobody registered) can't shift the
+    pairing off by one."""
+    match = _ORDINAL_NUM_RE.match(grade)
+    if not match:
+        return None
+    number = int(match.group(1)) + 1
+    if number in (1, 21, 31):
+        return "%dst" % number
+    if number in (2, 22, 32):
+        return "%dnd" % number
+    if number in (3, 23, 33):
+        return "%drd" % number
+    return "%dth" % number
+
+
+def _grade_flow(last_year_totals, this_year_totals, grades):
+    """Last season's grade G vs this season's grade G+1 -- the same cohort,
+    one grade further along, so the delta is who returned vs who didn't
+    (or, when positive, new registrants joining that grade-to-grade cohort).
+
+    Only emitted where the next grade actually appears in *either* season's
+    data (`grades`, the union already computed for the heatmap) -- otherwise
+    there is no real category to compare against (this season's export has
+    never had a "9th grade", so an 8th-grade row would compare against a
+    category that does not exist for this club, not just one that is
+    currently at zero).
+    """
+    flow = []
+    for grade in grades:
+        next_grade = _next_grade_label(grade)
+        if next_grade not in grades:
+            continue
+        last_count = last_year_totals.get(grade, 0)
+        this_count = this_year_totals.get(next_grade, 0)
+        flow.append({
+            "from_grade": grade,
+            "to_grade": next_grade,
+            "last_count": last_count,
+            "this_count": this_count,
+            "delta": this_count - last_count,
+        })
+    return flow
+
+
 def build_comparison(this_year_metrics, today_iso):
     """None if the live registration has no signups yet to compare."""
     timeline = this_year_metrics.get("timeline") or []
@@ -160,6 +218,10 @@ def build_comparison(this_year_metrics, today_iso):
         this_year_grade_points, open_date, through, grades)
     last_year_grade_days = _grade_days_from_offsets(
         last_year_grade_points, grades, last_year_max_day, last_year_days)
+    grade_flow = _grade_flow(
+        _grade_totals(last_year_grade_days, grades),
+        _grade_totals(this_year_grade_days, grades),
+        grades)
 
     return {
         "this_year_label": THIS_YEAR_LABEL,
@@ -206,4 +268,5 @@ def build_comparison(this_year_metrics, today_iso):
         "grades": grades,
         "this_year_grade_days": this_year_grade_days,
         "last_year_grade_days": last_year_grade_days,
+        "grade_flow": grade_flow,
     }

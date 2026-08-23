@@ -18,6 +18,57 @@ class NormalizeGradeTests(unittest.TestCase):
         self.assertEqual(compare._normalize_grade(None), "")
 
 
+class NextGradeLabelTests(unittest.TestCase):
+    def test_increments_the_ordinal_number(self):
+        self.assertEqual(compare._next_grade_label("3rd"), "4th")
+        self.assertEqual(compare._next_grade_label("8th"), "9th")
+
+    def test_picks_the_right_ordinal_suffix_around_the_teens(self):
+        self.assertEqual(compare._next_grade_label("12th"), "13th")
+        self.assertEqual(compare._next_grade_label("20th"), "21st")
+        self.assertEqual(compare._next_grade_label("21st"), "22nd")
+
+
+class GradeTotalsTests(unittest.TestCase):
+    def test_sums_each_grade_across_every_day(self):
+        grade_days = [
+            {"counts": {"3rd": 1, "4th": 3}},
+            {"counts": {"3rd": 20, "4th": 8}},
+        ]
+        totals = compare._grade_totals(grade_days, ["3rd", "4th"])
+        self.assertEqual(totals, {"3rd": 21, "4th": 11})
+
+
+class GradeFlowTests(unittest.TestCase):
+    def test_pairs_last_seasons_grade_with_this_seasons_next_grade_up(self):
+        # 3rd grade last season is 4th grade this season -- the same cohort,
+        # one year on -- per the worked example in the request that added
+        # this feature (18 - 26 = -8, an outflow of 8).
+        flow = compare._grade_flow(
+            {"3rd": 26}, {"4th": 18}, ["3rd", "4th"])
+        self.assertEqual(flow, [
+            {"from_grade": "3rd", "to_grade": "4th",
+             "last_count": 26, "this_count": 18, "delta": -8},
+        ])
+
+    def test_omits_a_transition_whose_next_grade_is_not_in_the_shared_grade_list(self):
+        # 8th has no "9th" in this club's data at all -- not just a grade
+        # currently at zero -- so it gets no row, rather than an invented
+        # "graduated" category nobody asked for.
+        flow = compare._grade_flow({"8th": 5}, {}, ["3rd", "8th"])
+        self.assertEqual(flow, [])
+
+    def test_includes_a_next_grade_that_exists_but_is_currently_zero(self):
+        # Unlike the 8th-grade case above, "4th" genuinely is one of this
+        # club's grades (it's in `grades`) -- it just has nobody registered
+        # yet this season, which is a real, informative negative delta.
+        flow = compare._grade_flow({"3rd": 5}, {}, ["3rd", "4th"])
+        self.assertEqual(flow, [
+            {"from_grade": "3rd", "to_grade": "4th",
+             "last_count": 5, "this_count": 0, "delta": -5},
+        ])
+
+
 class BuildComparisonTests(unittest.TestCase):
     def test_none_when_this_years_registration_has_no_signups_yet(self):
         self.assertIsNone(compare.build_comparison({"timeline": []}, "2026-08-13"))
@@ -145,6 +196,23 @@ class BuildComparisonTests(unittest.TestCase):
         result = compare.build_comparison(metrics, "2026-08-13")
         self.assertIn("2nd", result["grades"])
         self.assertEqual(result["this_year_grade_days"][0]["counts"]["2nd"], 0)
+
+    def test_grade_flow_pairs_last_seasons_grade_with_this_seasons_grade_one_up(self):
+        # scripts/history.py's 2025-26 day 0 has a 4th grader; this season's
+        # live export below has a 3rd grader on day 0 -- 3rd this season is
+        # not part of a 2nd->3rd transition here since last season had no
+        # 2nd grader on record until later days, so just check the shape:
+        # every row is a real transition the shared grade list can support.
+        metrics = {
+            "timeline": [{"date": "2026-08-13", "new": 1, "cumulative": 1}],
+            "grade_timeline": [{"date": "2026-08-13", "counts": {"3rd Grade": 1}}],
+        }
+        result = compare.build_comparison(metrics, "2026-08-13")
+        self.assertIn("grade_flow", result)
+        for row in result["grade_flow"]:
+            self.assertIn(row["from_grade"], result["grades"])
+            self.assertIn(row["to_grade"], result["grades"])
+            self.assertEqual(row["delta"], row["this_count"] - row["last_count"])
 
     def test_normalizes_grade_labels_from_both_seasons_to_the_same_row(self):
         # This season's export says "3rd Grade"; last season's says "3rd" --
