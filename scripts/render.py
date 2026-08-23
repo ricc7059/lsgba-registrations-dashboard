@@ -378,9 +378,17 @@ def _callout_block(x0, x1, pad_top, count, date_word, date_label, pct,
 def _comparison_bar_svg(c):
     """Daily count, this season's bars paired against last season's, on one
     shared scale -- plus last season's before/after-cutoff windows each
-    highlighted with their own callout."""
+    highlighted with their own callout.
+
+    Paired by actual calendar date, not day-of-window: shifted by
+    calendar_shift so a bar under the "Aug 13" tick is this season's real
+    Aug 13, not whatever day-of-window happened to land there. (The
+    cumulative chart is the one place day-of-window stays deliberate --
+    see its own docstring.)
+    """
     last_days, this_days = c["last_year_days"], c["this_year_days"]
-    this_by_day = dict((p["day"], p) for p in this_days)
+    shift = c["calendar_shift"]
+    this_by_day = dict((p["day"] + shift, p) for p in this_days)
     n = len(last_days)
     width, height = 860, 200
     # Extra top padding (vs. the other charts' 16px) is deliberate: every bar
@@ -472,7 +480,8 @@ def _comparison_bar_svg(c):
            band_bg, "".join(bars), labels, callouts))
 
 
-def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season_label):
+def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season_label,
+                            day_shift=0):
     """One season's day-by-grade grid. Colour is fixed (the season's own
     identity hue, matching the other two charts); fill-opacity carries the
     count, on a scale the caller shares across both seasons' grids so
@@ -485,6 +494,13 @@ def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season
     `days` only needs to cover the days that season actually has -- a day
     beyond it (this season, before it happens) draws no cell at all rather
     than a zero, so "not yet known" reads differently from "genuinely zero".
+
+    `day_shift` moves this grid's columns by that many day-offsets so the two
+    stacked grids line up by actual calendar date instead of day-of-window --
+    last season's grid passes 0 (it is the reference), this season's passes
+    compare.py's calendar_shift so its Aug 13 column sits under the Aug 13
+    column two slots into last season's, not directly under last season's
+    Aug 11.
     """
     n_cols = domain_days + 1
     width = 860
@@ -527,17 +543,18 @@ def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season
             count = p["counts"].get(grade, 0)
             row_totals[grade] += count
             opacity = 0.0 if not count else max(0.16, min(1.0, count / float(max_count)))
+            cell_x = cx(p["day"] + day_shift)
             cells.append(
                 '<rect x="%.1f" y="%.1f" width="%.1f" height="%d" rx="2" '
                 'fill="%s" fill-opacity="%.2f" stroke="%s" stroke-width="1">'
                 '<title>%s, %s: %d</title></rect>'
-                % (cx(p["day"]), cy(row_i), cell_w, row_h, colour, opacity,
+                % (cell_x, cy(row_i), cell_w, row_h, colour, opacity,
                    EDGE, escape(grade), p["label"], count))
             if count:
                 cells.append(
                     '<text x="%.1f" y="%.1f" class="cmp-heat-n" text-anchor="middle" '
                     'fill="%s">%d</text>'
-                    % (cx(p["day"]) + cell_w / 2.0, cy(row_i) + row_h / 2.0 + 3,
+                    % (cell_x + cell_w / 2.0, cy(row_i) + row_h / 2.0 + 3,
                        _cell_text_colour(colour, opacity), count))
 
     for row_i, grade in enumerate(grades):
@@ -546,8 +563,8 @@ def _comparison_heatmap_svg(days, grades, colour, max_count, domain_days, season
             '%d</text>' % (total_x, cy(row_i) + row_h / 2.0 + 3, row_totals[grade]))
 
     labels = _vertical_axis_labels(
-        (cx(d) + cell_w / 2.0, height - pad_bottom + 8, days[d]["label"])
-        for d in range(n_cols) if d < len(days))
+        (cx(p["day"] + day_shift) + cell_w / 2.0, height - pad_bottom + 8, p["label"])
+        for p in days)
 
     return (
         '<svg viewBox="0 0 %d %d" class="timeline cmp-heatmap" role="img" '
@@ -593,7 +610,7 @@ def _comparison_panel(tab, slug, is_first):
             c["domain_days"], c["last_year_label"])
         this_heatmap = _comparison_heatmap_svg(
             c["this_year_grade_days"], c["grades"], GOLD, max_count,
-            c["domain_days"], c["this_year_label"])
+            c["domain_days"], c["this_year_label"], day_shift=c["calendar_shift"])
         grade_card = (
             '  <section class="card wide"><h3>Daily registrations by grade '
             '<span class="sub">both seasons, same day-and-grade scale</span></h3>'

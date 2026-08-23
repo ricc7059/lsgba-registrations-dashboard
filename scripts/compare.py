@@ -127,6 +127,15 @@ def build_comparison(this_year_metrics, today_iso):
     today_day = (today - open_date).days
     total_to_date = this_year_days[-1]["cumulative"]
 
+    # How many calendar days later (or earlier) this season opened, ignoring
+    # year -- e.g. opening Aug 13 vs last season's Aug 11 is +2. The daily
+    # chart and heatmap use this to line up by actual calendar date, not by
+    # day-of-window; the cumulative chart deliberately keeps day-of-window
+    # (see its own docstring) since that is what makes a same-point-in-season
+    # pace comparison mean anything.
+    calendar_shift = (open_date.replace(year=history.OPEN_DATE.year)
+                       - history.OPEN_DATE).days
+
     last_year_days = history.TIMELINE
     last_year_max_day = last_year_days[-1]["day"]
     last_year_at_today = (history.TOTAL if today_day > last_year_max_day
@@ -158,6 +167,7 @@ def build_comparison(this_year_metrics, today_iso):
         "this_year_days": this_year_days,
         "this_year_today_day": today_day,
         "this_year_total": total_to_date,
+        "calendar_shift": calendar_shift,
         "last_year_label": history.LABEL,
         "last_year_open_label": history.OPEN_LABEL,
         "last_year_close_label": history.CLOSE_LABEL,
@@ -184,6 +194,14 @@ def build_comparison(this_year_metrics, today_iso):
         "callout_before_made_team_by_grade": sorted(
             history.MADE_TEAM_BEFORE_CUTOFF_BY_GRADE.items(),
             key=lambda pair: aggregate.grade_sort_key(pair[0])),
+        # Deliberately day-of-window, not calendar-shifted: this feeds the
+        # cumulative chart's own (intentionally day-of-window) axis too. The
+        # calendar-aligned charts (daily bars, heatmap) stay correct because
+        # last_year_max_day (30) has enough headroom for this_year's shifted
+        # range at any point in a normal ~31-day season; if a season someday
+        # runs long enough that today_day + calendar_shift exceeds 30, this
+        # season's rightmost bars/cells would land past last season's last
+        # column and need domain_days widened to match.
         "domain_days": max(this_year_days[-1]["day"], last_year_max_day),
         "grades": grades,
         "this_year_grade_days": this_year_grade_days,

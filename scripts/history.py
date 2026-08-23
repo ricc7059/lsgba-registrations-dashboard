@@ -13,10 +13,20 @@ backfilled from a later re-export that added one (same 116 rows, same dates --
 verified against TIMELINE's day-by-day totals before replacing this file).
 """
 
+import datetime
+
 LABEL = "2025-26"
 OPEN_LABEL = "Aug 11"
 CLOSE_LABEL = "Sep 10"
 TOTAL = 116
+
+# A real date, not just OPEN_LABEL's display string -- compare.py needs it to
+# work out how many calendar days apart the two seasons' openings are (e.g.
+# this season opening Aug 13 is 2 days after this Aug 11), so the daily chart
+# and heatmap can align "same calendar day" rather than "same day-of-window".
+# Never rendered directly: piiscan.py reads any YYYY-MM-DD shape as a
+# possible date of birth, so this stays server-side arithmetic only.
+OPEN_DATE = datetime.date(2025, 8, 11)
 
 # One entry per calendar day of the registration window, day 0 = opening day.
 TIMELINE = [

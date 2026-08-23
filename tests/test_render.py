@@ -1,3 +1,4 @@
+import re
 import unittest
 
 from scripts import piiscan, render
@@ -335,6 +336,7 @@ def _comparison_tab():
         "comparison": {
             "this_year_label": "2026-27",
             "this_year_open_label": "Aug 13",
+            "calendar_shift": 2,
             "this_year_days": [
                 {"day": 0, "label": "Aug 13", "new": 5, "cumulative": 5},
                 {"day": 1, "label": "Aug 14", "new": 61, "cumulative": 66},
@@ -384,14 +386,55 @@ def _comparison_tab():
     }
 
 
+def _bar_x(svg, title_text):
+    """The x of the <rect> immediately preceding a given bar's <title>."""
+    before = svg[:svg.index(title_text)]
+    return float(re.findall(r'<rect x="([\d.]+)"', before)[-1])
+
+
+class ComparisonBarAlignmentTests(unittest.TestCase):
+    def test_this_years_bar_sits_under_last_years_matching_calendar_date(self):
+        # This season opened Aug 13, 2 calendar days after last season's
+        # Aug 11 -- its day-0 bar (Aug 13, count 9) must land next to last
+        # season's day-index 2 (also Aug 13), not day-index 0 (Aug 11).
+        c = {
+            "last_year_days": [
+                {"day": 0, "label": "Aug 11", "new": 4},
+                {"day": 1, "label": "Aug 12", "new": 8},
+                {"day": 2, "label": "Aug 13", "new": 6},
+            ],
+            "this_year_days": [{"day": 0, "label": "Aug 13", "new": 9}],
+            "calendar_shift": 2,
+            "callout_day": 0, "callout_label": "Aug 24",
+            "callout_count": 0, "callout_pct": 0,
+            "callout_made_team": 0, "callout_made_team_pct": 0,
+            "callout_made_team_by_grade": [],
+            "callout_before_count": 0, "callout_before_pct": 0,
+            "callout_before_made_team": 0, "callout_before_made_team_pct": 0,
+            "callout_before_made_team_by_grade": [],
+            "last_year_label": "2025-26", "this_year_label": "2026-27",
+        }
+        svg = render._comparison_bar_svg(c)
+        x_last_aug11 = _bar_x(svg, '<title>2025-26 season, Aug 11: 4</title>')
+        x_last_aug13 = _bar_x(svg, '<title>2025-26 season, Aug 13: 6</title>')
+        x_this_aug13 = _bar_x(svg, '<title>2026-27 season, Aug 13: 9</title>')
+        self.assertLess(abs(x_this_aug13 - x_last_aug13), 15)
+        self.assertGreater(abs(x_this_aug13 - x_last_aug11), 15)
+
+
 class ComparisonPanelTests(unittest.TestCase):
     def setUp(self):
         self.html = render.render_dashboard([_comparison_tab()], "now", "2026-08-14")
 
     def test_every_nonzero_bar_gets_a_count_label(self):
-        # Fixture: last season days 0,1 are nonzero (day 2 is 0), this season
-        # days 0,1 are both nonzero -- 4 labelled bars, not 5.
-        self.assertEqual(self.html.count('class="cmp-bar-label'), 4)
+        # Fixture: last season days 0,1 are nonzero (day 2 is 0) -- 2 bars.
+        # This season's calendar_shift is 2, so its day 0 (5) lands on last
+        # season's day-index 2 (in range) and its day 1 (61) would land on
+        # index 3 -- past this minimal 3-day last_year_days fixture, so only
+        # one of this season's two days actually renders here. 3 labels,
+        # not 4 -- this is the fixture being smaller than a real 31-day
+        # season, not a bug (see compare.py's domain_days comment).
+        self.assertEqual(self.html.count('class="cmp-bar-label'), 3)
 
     def test_a_zero_count_bar_gets_no_label(self):
         # last_year_days day 2 is 0 -- present as a bar, not as a "0" label.

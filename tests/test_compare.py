@@ -28,6 +28,25 @@ class BuildComparisonTests(unittest.TestCase):
         self.assertEqual(result["this_year_open_label"], "Aug 13")
         self.assertEqual(result["this_year_days"][0]["day"], 0)
 
+    def test_calendar_shift_is_the_gap_between_the_two_opening_dates(self):
+        # history.OPEN_DATE is Aug 11, 2025. Opening Aug 13 is +2 days later,
+        # ignoring year -- so this season's day 0 (Aug 13) lines up with last
+        # season's day-index 2 (also Aug 13) on the daily chart and heatmap.
+        metrics = {"timeline": [{"date": "2026-08-13", "new": 5, "cumulative": 5}]}
+        result = compare.build_comparison(metrics, "2026-08-13")
+        self.assertEqual(result["calendar_shift"], 2)
+        self.assertEqual(history.TIMELINE[2]["label"], "Aug 13")
+
+    def test_calendar_shift_is_zero_when_both_seasons_open_the_same_date(self):
+        metrics = {"timeline": [{"date": "2026-08-11", "new": 5, "cumulative": 5}]}
+        result = compare.build_comparison(metrics, "2026-08-11")
+        self.assertEqual(result["calendar_shift"], 0)
+
+    def test_calendar_shift_is_negative_when_this_season_opens_earlier(self):
+        metrics = {"timeline": [{"date": "2026-08-09", "new": 5, "cumulative": 5}]}
+        result = compare.build_comparison(metrics, "2026-08-09")
+        self.assertEqual(result["calendar_shift"], -2)
+
     def test_gap_days_are_zero_filled_with_cumulative_carried_flat(self):
         metrics = {"timeline": [
             {"date": "2026-08-13", "new": 5, "cumulative": 5},

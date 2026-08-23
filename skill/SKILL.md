@@ -164,14 +164,27 @@ once it closes, freeze this season's numbers into `scripts/history.py` the
 same way (see that file's header) and update `THIS_YEAR_LABEL` in
 `scripts/compare.py`.
 
-The tab has four charts, all aligned by **day of registration window** (day 0
-= the day registration opened), not by calendar date — the two seasons open a
-couple of days apart, so a shared day-offset axis is what makes the pace
-comparison mean anything:
+The tab has four charts. The cumulative chart aligns by **day of
+registration window** (day 0 = the day registration opened) rather than
+calendar date, deliberately — the two seasons open a couple of days apart,
+and a shared day-offset axis is what makes a same-point-in-season pace
+comparison mean anything. The other three (daily bars, both heatmap grids)
+align by **actual calendar date** instead — a bar or cell under the "Aug 13"
+tick is that season's real Aug 13, not whatever day-of-window happened to
+land there. `compare.py`'s `calendar_shift` is the gap in days between the
+two seasons' opening dates (e.g. +2 when this season opens Aug 13 and last
+season opened Aug 11); the daily chart and heatmap shift this season's bars
+and cells by that amount before plotting them, so the two seasons' actual
+matching dates line up instead of their day-*offsets*. This distinction
+matters: before this shift existed, this season's Aug 13 registrations were
+plotted under an "Aug 11" label (borrowed from last season, which is the
+axis's calendar reference), which read as if they had happened two days
+before the registration actually opened.
 
-1. **Cumulative registrations** — both seasons' running totals overlaid.
+1. **Cumulative registrations** — both seasons' running totals overlaid, by
+   day-of-window (not calendar-shifted — see above).
 2. **Daily registrations** — both seasons' new-per-day counts paired bar by
-   bar. The chart carries **two** callouts, one for on-or-before Aug 24
+   bar, calendar-aligned. The chart carries **two** callouts, one for on-or-before Aug 24
    ("through Aug 24"), one for after, both last season's numbers only
    (neither is re-evaluated against this season), each with the same two
    parts:
@@ -202,12 +215,16 @@ comparison mean anything:
    draw order last, so a tall bar never paints over it.
 3. **Daily registrations by grade** — a heatmap, one grid per season stacked
    vertically (not a stacked bar chart — that read poorly with this many
-   grade categories). Rows are grade, columns are day-offset, and cell shade
-   is that season's own identity colour (maroon for last season, gold for
-   this season) at an opacity scaled to the count, on one shared 0–max scale
-   across both grids so "darker" means the same thing in both. This season's
-   grid only draws cells through today — a day that hasn't happened yet stays
-   blank rather than reading as a false zero.
+   grade categories), calendar-aligned like the daily chart above (this
+   season's grid takes `day_shift=calendar_shift` so its columns sit under
+   the matching calendar-date columns in last season's grid above it, not
+   under last season's day-of-window-equivalent columns). Rows are grade,
+   columns are day-offset, and cell shade is that season's own identity
+   colour (maroon for last season, gold for this season) at an opacity
+   scaled to the count, on one shared 0–max scale across both grids so
+   "darker" means the same thing in both. This season's grid only draws
+   cells through today — a day that hasn't happened yet stays blank rather
+   than reading as a false zero.
 
    Every nonzero cell is directly labelled with its count (see
    `_comparison_heatmap_svg`); text colour is picked per cell, not fixed, by
