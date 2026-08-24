@@ -756,7 +756,7 @@ def _comparison_panel(tab, slug, is_first):
         '    <p class="dates">Day 0 = registration opens &middot; %s last season, '
         '%s this season</p>'
         '  </header>'
-        '  <div class="board">%s</div>'
+        '  <div class="board board-4">%s</div>'
         '  <section class="card wide"><h3>Cumulative registrations '
         '<span class="sub">both seasons, aligned by day of registration window</span>'
         '</h3>%s%s</section>'
@@ -903,6 +903,15 @@ margin-bottom:20px}
 .board{display:grid;grid-template-columns:repeat(3,1fr);
 background:linear-gradient(135deg,var(--maroon) 0%%,var(--maroon-deep) 100%%);
 border:1px solid rgba(210,183,124,.28);border-radius:16px;overflow:hidden}
+/* The season-comparison board has 4 cells, not 3 -- on a fixed 3-column
+   grid the fourth cell wraps to a lonely second row. board-4 is only the
+   column count; everything else about .board still applies. Scoped to
+   non-mobile only -- a class selector otherwise outranks the plain .board
+   the mobile media query below uses to collapse to one column, and would
+   win over it despite coming first in the stylesheet. */
+@media(min-width:861px){
+.board.board-4{grid-template-columns:repeat(4,1fr)}
+}
 .board-cell{padding:20px 22px;border-right:1px solid rgba(210,183,124,.18);
 display:flex;flex-direction:column;gap:7px}
 .board-cell:last-child{border-right:0}
@@ -1035,25 +1044,30 @@ padding:18px 16px;gap:16px}
 .tab-name{flex:1 1 auto}
 .main{padding:20px 16px 44px}
 .board{grid-template-columns:1fr}
-/* justify-content:space-between (the old rule) spread label/value/suffix
-   across the row at positions set by each cell's own text length, so the
-   number landed in a different spot on every row depending on how long its
-   label happened to be. margin-left:auto on the value instead soaks up all
-   the row's free space right before it, pushing value+suffix together
-   against the row's right edge -- the same edge on every row, regardless of
-   label or suffix length, so the numbers read as a lined-up column instead
-   of drifting. (A grid-column approach was tried first and rejected: each
-   board-cell is its own independent grid, so a long, unwrapped suffix
-   forced that one row's column wider than the others and the numbers
-   drifted anyway -- worse, it could overflow the viewport. Flex items wrap
-   their own text at ordinary word breaks under column-gap pressure, so a
-   long suffix here just wraps instead of pushing the row wider.) */
+/* Two earlier attempts both failed the same way: justify-content:space-
+   between spread label/value/suffix across the row at positions set by
+   that row's own text length, so the number's x position drifted row to
+   row; a later margin-left:auto version pushed value+suffix flush to a
+   shared right edge as a *group*, but the value's own left edge still
+   drifted, since a short suffix let the group (and so the value inside it)
+   sit further right than a row with a long, wrapped suffix -- still not a
+   lined-up column of numbers, just a lined-up group edge.
+   The fix is to stop sizing the label to its own text at all: a fixed
+   width, occupied fully by a long label and left as blank trailing space
+   by a short one, puts every value's left edge at the exact same x
+   regardless of that row's label length. min-width plus right-aligned text
+   on the value (already monospace/tabular-nums -- see .num) then lines up
+   the digits themselves too, not just an outer edge. Suffix simply follows
+   at whatever's left and wraps normally; it no longer needs to be
+   full-width to force alignment (that was the earlier bug: an unwrapped
+   long suffix could force the row wider than the viewport). */
 .board-cell{border-right:0;border-bottom:1px solid rgba(210,183,124,.18);
 padding:15px 18px;display:flex;flex-direction:row;align-items:baseline;
-column-gap:8px}
+column-gap:10px}
 .board-cell:last-child{border-bottom:0}
-.board-value{font-size:1.7rem;margin-left:auto;white-space:nowrap}
-.board-suffix{text-align:right}
+.board-label{flex:0 1 128px}
+.board-value{font-size:1.7rem;flex:0 0 auto;min-width:3ch;text-align:right}
+.board-suffix{flex:1 1 auto}
 .card-grid{grid-template-columns:1fr}
 .bar-row{grid-template-columns:96px 1fr 30px}
 }
