@@ -1008,11 +1008,11 @@ margin-top:2px}
    heatmap is deliberately compact and the flow diagram sits beside it at its
    own natural size. */
 .cmp-heat-row .timeline{width:auto;height:auto;max-width:100%%;flex:0 0 auto}
-/* margin-left:auto, not flex-grow -- the block should sit flush against the
-   card's right edge (lining up with last season's grid above it), not
-   stretch to fill the row and leave the diagram itself pinned to the left
-   of a wider box. */
-.cmp-flow-block{flex:0 0 auto;margin-left:auto}
+/* margin:0 auto, not flex-grow -- the auto margins split the row's leftover
+   space (everything past this season's compact heatmap) evenly on both
+   sides, centering the block in the free area under last season's grid
+   instead of stretching the block itself to fill that space. */
+.cmp-flow-block{flex:0 0 auto;margin:0 auto}
 .cmp-flow-title{margin:0 0 6px;font-size:.7rem;letter-spacing:.06em;
 text-transform:uppercase;color:var(--dim);font-weight:700}
 .cmp-flow-title .cmp-flow-sub{text-transform:none;letter-spacing:0;
