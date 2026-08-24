@@ -1035,10 +1035,25 @@ padding:18px 16px;gap:16px}
 .tab-name{flex:1 1 auto}
 .main{padding:20px 16px 44px}
 .board{grid-template-columns:1fr}
+/* justify-content:space-between (the old rule) spread label/value/suffix
+   across the row at positions set by each cell's own text length, so the
+   number landed in a different spot on every row depending on how long its
+   label happened to be. margin-left:auto on the value instead soaks up all
+   the row's free space right before it, pushing value+suffix together
+   against the row's right edge -- the same edge on every row, regardless of
+   label or suffix length, so the numbers read as a lined-up column instead
+   of drifting. (A grid-column approach was tried first and rejected: each
+   board-cell is its own independent grid, so a long, unwrapped suffix
+   forced that one row's column wider than the others and the numbers
+   drifted anyway -- worse, it could overflow the viewport. Flex items wrap
+   their own text at ordinary word breaks under column-gap pressure, so a
+   long suffix here just wraps instead of pushing the row wider.) */
 .board-cell{border-right:0;border-bottom:1px solid rgba(210,183,124,.18);
-padding:15px 18px;flex-direction:row;align-items:baseline;justify-content:space-between}
+padding:15px 18px;display:flex;flex-direction:row;align-items:baseline;
+column-gap:8px}
 .board-cell:last-child{border-bottom:0}
-.board-value{font-size:1.7rem}
+.board-value{font-size:1.7rem;margin-left:auto;white-space:nowrap}
+.board-suffix{text-align:right}
 .card-grid{grid-template-columns:1fr}
 .bar-row{grid-template-columns:96px 1fr 30px}
 }
